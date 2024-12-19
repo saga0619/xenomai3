@@ -238,8 +238,6 @@ int rtdev_map_rtskb(struct rtskb *skb);
 void rtdev_unmap_rtskb(struct rtskb *skb);
 
 struct rtskb *rtnetdev_alloc_rtskb(struct rtnet_device *dev, unsigned int size);
-struct rtskb *rtnetdev_alloc_rtskb_ip_align(struct rtnet_device *rtdev,
-		unsigned int length, gfp_t gfp);
 
 #define rtnetdev_priv(dev) ((dev)->priv)
 

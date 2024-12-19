@@ -1,0 +1,821 @@
+From f4d482dacfa4a940c6cbbdabb9f23a393617c1b8 Mon Sep 17 00:00:00 2001
+From: Gino Strobbe <G.Strobbe@telenet.be>
+Date: Sat, 1 Jun 2024 08:23:05 +0200
+Subject: [PATCH] [v1 09/12] e1000e: Function renaming
+
+Signed-off-by: Gino Strobbe <G.Strobbe@telenet.be>
+---
+ kernel/drivers/net/drivers/e1000e/ethtool.c |  76 ++++++-------
+ kernel/drivers/net/drivers/e1000e/netdev.c  | 120 ++++++++++----------
+ 2 files changed, 98 insertions(+), 98 deletions(-)
+
+diff --git a/kernel/drivers/net/drivers/e1000e/ethtool.c b/kernel/drivers/net/drivers/e1000e/ethtool.c
+index 8020034ce..5fcb8fd36 100644
+--- a/kernel/drivers/net/drivers/e1000e/ethtool.c
++++ b/kernel/drivers/net/drivers/e1000e/ethtool.c
+@@ -112,7 +112,7 @@ static int e1000_get_link_ksettings(struct rtnet_device *netdev,
+ 				    struct ethtool_link_ksettings *cmd)
+ {
+ 	u32 speed, supported, advertising, lp_advertising, lpa_t;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+ 	if (hw->phy.media_type == e1000_media_type_copper) {
+@@ -152,8 +152,8 @@ static int e1000_get_link_ksettings(struct rtnet_device *netdev,
+ 	speed = SPEED_UNKNOWN;
+ 	cmd->base.duplex = DUPLEX_UNKNOWN;
+ 
+-	if (netif_running(netdev)) {
+-		if (netif_carrier_ok(netdev)) {
++	if (rtnetif_running(netdev)) {
++		if (rtnetif_carrier_ok(netdev)) {
+ 			speed = adapter->link_speed;
+ 			cmd->base.duplex = adapter->link_duplex - 1;
+ 		}
+@@ -181,7 +181,7 @@ static int e1000_get_link_ksettings(struct rtnet_device *netdev,
+ 
+ 	/* MDI-X => 2; MDI =>1; Invalid =>0 */
+ 	if ((hw->phy.media_type == e1000_media_type_copper) &&
+-	    netif_carrier_ok(netdev))
++	    rtnetif_carrier_ok(netdev))
+ 		cmd->base.eth_tp_mdix = hw->phy.is_mdix ?
+ 			ETH_TP_MDI_X : ETH_TP_MDI;
+ 	else
+@@ -267,7 +267,7 @@ err_inval:
+ static int e1000_set_link_ksettings(struct rtnet_device *netdev,
+ 				    const struct ethtool_link_ksettings *cmd)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	int ret_val = 0;
+ 	u32 advertising;
+@@ -340,7 +340,7 @@ static int e1000_set_link_ksettings(struct rtnet_device *netdev,
+ 	}
+ 
+ 	/* reset the link */
+-	if (netif_running(adapter->netdev)) {
++	if (rtnetif_running(adapter->netdev)) {
+ 		e1000e_down(adapter, true);
+ 		e1000e_up(adapter);
+ 	} else {
+@@ -356,7 +356,7 @@ out:
+ static void e1000_get_pauseparam(struct rtnet_device *netdev,
+ 				 struct ethtool_pauseparam *pause)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+ 	pause->autoneg =
+@@ -375,7 +375,7 @@ static void e1000_get_pauseparam(struct rtnet_device *netdev,
+ static int e1000_set_pauseparam(struct rtnet_device *netdev,
+ 				struct ethtool_pauseparam *pause)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	int retval = 0;
+ 
+@@ -388,7 +388,7 @@ static int e1000_set_pauseparam(struct rtnet_device *netdev,
+ 
+ 	if (adapter->fc_autoneg == AUTONEG_ENABLE) {
+ 		hw->fc.requested_mode = e1000_fc_default;
+-		if (netif_running(adapter->netdev)) {
++		if (rtnetif_running(adapter->netdev)) {
+ 			e1000e_down(adapter, true);
+ 			e1000e_up(adapter);
+ 		} else {
+@@ -425,14 +425,14 @@ out:
+ 
+ static u32 e1000_get_msglevel(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	return adapter->msg_enable;
+ }
+ 
+ static void e1000_set_msglevel(struct rtnet_device *netdev, u32 data)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	adapter->msg_enable = data;
+ }
+@@ -446,7 +446,7 @@ static int e1000_get_regs_len(struct rtnet_device __always_unused *netdev)
+ static void e1000_get_regs(struct rtnet_device *netdev,
+ 			   struct ethtool_regs *regs, void *p)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 *regs_buff = p;
+ 	u16 phy_data;
+@@ -504,7 +504,7 @@ static void e1000_get_regs(struct rtnet_device *netdev,
+ 
+ static int e1000_get_eeprom_len(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	return adapter->hw.nvm.word_size * 2;
+ }
+@@ -512,7 +512,7 @@ static int e1000_get_eeprom_len(struct rtnet_device *netdev)
+ static int e1000_get_eeprom(struct rtnet_device *netdev,
+ 			    struct ethtool_eeprom *eeprom, u8 *bytes)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u16 *eeprom_buff;
+ 	int first_word;
+@@ -569,7 +569,7 @@ static int e1000_get_eeprom(struct rtnet_device *netdev,
+ static int e1000_set_eeprom(struct rtnet_device *netdev,
+ 			    struct ethtool_eeprom *eeprom, u8 *bytes)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u16 *eeprom_buff;
+ 	void *ptr;
+@@ -649,7 +649,7 @@ out:
+ static void e1000_get_drvinfo(struct rtnet_device *netdev,
+ 			      struct ethtool_drvinfo *drvinfo)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	strscpy(drvinfo->driver, e1000e_driver_name, sizeof(drvinfo->driver));
+ 
+@@ -671,7 +671,7 @@ static void e1000_get_ringparam(struct rtnet_device *netdev,
+ 				struct kernel_ethtool_ringparam *kernel_ring,
+ 				struct netlink_ext_ack *extack)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	ring->rx_max_pending = E1000_MAX_RXD;
+ 	ring->tx_max_pending = E1000_MAX_TXD;
+@@ -684,7 +684,7 @@ static int e1000_set_ringparam(struct rtnet_device *netdev,
+ 			       struct kernel_ethtool_ringparam *kernel_ring,
+ 			       struct netlink_ext_ack *extack)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_ring *temp_tx = NULL, *temp_rx = NULL;
+ 	int err = 0, size = sizeof(struct e1000_ring);
+ 	bool set_tx = false, set_rx = false;
+@@ -709,7 +709,7 @@ static int e1000_set_ringparam(struct rtnet_device *netdev,
+ 	while (test_and_set_bit(__E1000_RESETTING, &adapter->state))
+ 		usleep_range(1000, 2000);
+ 
+-	if (!netif_running(adapter->netdev)) {
++	if (!rtnetif_running(adapter->netdev)) {
+ 		/* Set counts now and allocate resources during open() */
+ 		adapter->tx_ring->count = new_tx_count;
+ 		adapter->rx_ring->count = new_rx_count;
+@@ -996,7 +996,7 @@ static int e1000_eeprom_test(struct e1000_adapter *adapter, u64 *data)
+ static irqreturn_t e1000_test_intr(int __always_unused irq, void *data)
+ {
+ 	struct rtnet_device *netdev = (struct rtnet_device *)data;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+ 	adapter->test_icr |= er32(ICR);
+@@ -1151,7 +1151,7 @@ static void e1000_free_desc_rings(struct e1000_adapter *adapter)
+ 						 buffer_info->dma,
+ 						 buffer_info->length,
+ 						 DMA_TO_DEVICE);
+-			dev_kfree_skb(buffer_info->skb);
++			dev_kfree_rtskb(buffer_info->skb);
+ 		}
+ 	}
+ 
+@@ -1163,7 +1163,7 @@ static void e1000_free_desc_rings(struct e1000_adapter *adapter)
+ 				dma_unmap_single(&pdev->dev,
+ 						 buffer_info->dma,
+ 						 2048, DMA_FROM_DEVICE);
+-			dev_kfree_skb(buffer_info->skb);
++			dev_kfree_rtskb(buffer_info->skb);
+ 		}
+ 	}
+ 
+@@ -1236,7 +1236,7 @@ static int e1000_setup_desc_rings(struct e1000_adapter *adapter)
+ 			ret_val = 3;
+ 			goto err_nomem;
+ 		}
+-		skb_put(skb, skb_size);
++		rtskb_put(skb, skb_size);
+ 		tx_ring->buffer_info[i].skb = skb;
+ 		tx_ring->buffer_info[i].length = skb->len;
+ 		tx_ring->buffer_info[i].dma =
+@@ -1814,11 +1814,11 @@ static int e1000e_get_sset_count(struct rtnet_device __always_unused *netdev,
+ static void e1000_diag_test(struct rtnet_device *netdev,
+ 			    struct ethtool_test *eth_test, u64 *data)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	u16 autoneg_advertised;
+ 	u8 forced_speed_duplex;
+ 	u8 autoneg;
+-	bool if_running = netif_running(netdev);
++	bool if_running = rtnetif_running(netdev);
+ 
+ 	pm_runtime_get_sync(netdev->dev.parent);
+ 
+@@ -1914,7 +1914,7 @@ static void e1000_diag_test(struct rtnet_device *netdev,
+ static void e1000_get_wol(struct rtnet_device *netdev,
+ 			  struct ethtool_wolinfo *wol)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	wol->supported = 0;
+ 	wol->wolopts = 0;
+@@ -1949,7 +1949,7 @@ static void e1000_get_wol(struct rtnet_device *netdev,
+ static int e1000_set_wol(struct rtnet_device *netdev,
+ 			 struct ethtool_wolinfo *wol)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	if (!(adapter->flags & FLAG_HAS_WOL) ||
+ 	    !device_can_wakeup(&adapter->pdev->dev) ||
+@@ -1979,7 +1979,7 @@ static int e1000_set_wol(struct rtnet_device *netdev,
+ static int e1000_set_phys_id(struct rtnet_device *netdev,
+ 			     enum ethtool_phys_id_state state)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+ 	switch (state) {
+@@ -2017,7 +2017,7 @@ static int e1000_get_coalesce(struct rtnet_device *netdev,
+ 			      struct kernel_ethtool_coalesce *kernel_coal,
+ 			      struct netlink_ext_ack *extack)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	if (adapter->itr_setting <= 4)
+ 		ec->rx_coalesce_usecs = adapter->itr_setting;
+@@ -2032,7 +2032,7 @@ static int e1000_set_coalesce(struct rtnet_device *netdev,
+ 			      struct kernel_ethtool_coalesce *kernel_coal,
+ 			      struct netlink_ext_ack *extack)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	if ((ec->rx_coalesce_usecs > E1000_MAX_ITR_USECS) ||
+ 	    ((ec->rx_coalesce_usecs > 4) &&
+@@ -2065,9 +2065,9 @@ static int e1000_set_coalesce(struct rtnet_device *netdev,
+ 
+ static int e1000_nway_reset(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+-	if (!netif_running(netdev))
++	if (!rtnetif_running(netdev))
+ 		return -EAGAIN;
+ 
+ 	if (!adapter->hw.mac.autoneg)
+@@ -2084,7 +2084,7 @@ static void e1000_get_ethtool_stats(struct rtnet_device *netdev,
+ 				    struct ethtool_stats __always_unused *stats,
+ 				    u64 *data)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct rtnl_link_stats64 net_stats;
+ 	int i;
+ 	char *p = NULL;
+@@ -2147,7 +2147,7 @@ static int e1000_get_rxnfc(struct rtnet_device *netdev,
+ 
+ 	switch (info->cmd) {
+ 	case ETHTOOL_GRXFH: {
+-		struct e1000_adapter *adapter = netdev_priv(netdev);
++		struct e1000_adapter *adapter = netdev->priv;
+ 		struct e1000_hw *hw = &adapter->hw;
+ 		u32 mrqc;
+ 
+@@ -2194,7 +2194,7 @@ static int e1000_get_rxnfc(struct rtnet_device *netdev,
+ static int e1000e_get_eee(struct rtnet_device *netdev,
+ 			  struct ethtool_keee *edata)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u16 cap_addr, lpa_addr, pcs_stat_addr, phy_data;
+ 	u32 ret_val;
+@@ -2321,7 +2321,7 @@ static int e1000e_set_eee(struct net_device *netdev, struct ethtool_keee *edata)
+ static int e1000e_get_ts_info(struct rtnet_device *netdev,
+ 			      struct ethtool_ts_info *info)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	ethtool_op_get_ts_info(netdev, info);
+ 
+@@ -2354,7 +2354,7 @@ static int e1000e_get_ts_info(struct rtnet_device *netdev,
+ 
+ static u32 e1000e_get_priv_flags(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	u32 priv_flags = 0;
+ 
+ 	if (adapter->flags2 & FLAG2_ENABLE_S0IX_FLOWS)
+@@ -2365,7 +2365,7 @@ static u32 e1000e_get_priv_flags(struct rtnet_device *netdev)
+ 
+ static int e1000e_set_priv_flags(struct rtnet_device *netdev, u32 priv_flags)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	unsigned int flags2 = adapter->flags2;
+ 
+ 	flags2 &= ~FLAG2_ENABLE_S0IX_FLOWS;
+diff --git a/kernel/drivers/net/drivers/e1000e/netdev.c b/kernel/drivers/net/drivers/e1000e/netdev.c
+index a2761a828..025ac637a 100644
+--- a/kernel/drivers/net/drivers/e1000e/netdev.c
++++ b/kernel/drivers/net/drivers/e1000e/netdev.c
+@@ -234,7 +234,7 @@ static void e1000e_dump(struct e1000_adapter *adapter)
+ 	}
+ 
+ 	/* Print Tx Ring Summary */
+-	if (!netdev || !netif_running(netdev))
++	if (!netdev || !rtnetif_running(netdev))
+ 		return;
+ 
+ 	dev_info(&adapter->pdev->dev, "Tx Ring Summary\n");
+@@ -541,7 +541,7 @@ static void e1000e_update_rdt_wa(struct e1000_ring *rx_ring, unsigned int i)
+ 
+ 		ew32(RCTL, rctl & ~E1000_RCTL_EN);
+ 		e_err("ME firmware caused invalid RDT - resetting\n");
+-		schedule_work(&adapter->reset_task);
++		rtdm_schedule_nrt_work(&adapter->reset_task);
+ 	}
+ }
+ 
+@@ -558,7 +558,7 @@ static void e1000e_update_tdt_wa(struct e1000_ring *tx_ring, unsigned int i)
+ 
+ 		ew32(TCTL, tctl & ~E1000_TCTL_EN);
+ 		e_err("ME firmware caused invalid TDT - resetting\n");
+-		schedule_work(&adapter->reset_task);
++		rtdm_schedule_nrt_work(&adapter->reset_task);
+ 	}
+ }
+ 
+@@ -586,11 +586,11 @@ static void e1000_alloc_rx_buffers(struct e1000_ring *rx_ring,
+ 	while (cleaned_count--) {
+ 		skb = buffer_info->skb;
+ 		if (skb) {
+-			skb_trim(skb, 0);
++			rtskb_trim(skb, 0);
+ 			goto map_skb;
+ 		}
+ 
+-		skb = __netdev_alloc_skb_ip_align(netdev, bufsz, gfp);
++		skb = rtnetdev_alloc_rtskb_ip_align(netdev, bufsz, gfp);
+ 		if (!skb) {
+ 			/* Better luck next round */
+ 			adapter->alloc_rx_buff_failed++;
+@@ -725,7 +725,7 @@ static bool e1000_clean_rx_irq(struct e1000_adapter *adapter,
+ 		total_rx_bytes += length;
+ 		total_rx_packets++;
+ 		/* end copybreak code */
+-		skb_put(skb, length);
++		rtskb_put(skb, length);
+ 
+ 		/* Receive Checksum Offload */
+ 		e1000_rx_checksum(adapter, staterr, skb);
+@@ -833,16 +833,16 @@ static bool e1000_clean_tx_irq(struct e1000_ring *tx_ring)
+ 	tx_ring->next_to_clean = i;
+ 
+ #define TX_WAKE_THRESHOLD 32
+-	if (count && netif_carrier_ok(netdev) &&
++	if (count && rtnetif_carrier_ok(netdev) &&
+ 	    e1000_desc_unused(tx_ring) >= TX_WAKE_THRESHOLD) {
+ 		/* Make sure that anybody stopping the queue after this
+ 		 * sees the new next_to_clean.
+ 		 */
+ 		smp_mb();
+ 
+-		if (netif_queue_stopped(netdev) &&
++		if (rtnetif_queue_stopped(netdev) &&
+ 		    !(test_bit(__E1000_DOWN, &adapter->state))) {
+-			netif_wake_queue(netdev);
++			rtnetif_wake_queue(netdev);
+ 			++adapter->restart_queue;
+ 		}
+ 	}
+@@ -856,7 +856,7 @@ static bool e1000_clean_tx_irq(struct e1000_ring *tx_ring)
+ 		    time_after(jiffies, tx_ring->buffer_info[i].time_stamp
+ 			       + (adapter->tx_timeout_factor * HZ)) &&
+ 		    !(er32(STATUS) & E1000_STATUS_TXOFF))
+-			schedule_work(&adapter->print_hang_task);
++			rtdm_schedule_nrt_work(&adapter->print_hang_task);
+ 		else
+ 			adapter->tx_hang_recheck = false;
+ 	}
+@@ -882,14 +882,14 @@ static void e1000_clean_rx_ring(struct e1000_ring *rx_ring)
+ 		buffer_info->dma = 0;
+ 
+ 		if (buffer_info->skb) {
+-			dev_kfree_skb(buffer_info->skb);
++			dev_kfree_rtskb(buffer_info->skb);
+ 			buffer_info->skb = NULL;
+ 		}
+ 	}
+ 
+ 	/* there also may be some cached data from a chained receive */
+ 	if (rx_ring->rx_skb_top) {
+-		dev_kfree_skb(rx_ring->rx_skb_top);
++		dev_kfree_rtskb(rx_ring->rx_skb_top);
+ 		rx_ring->rx_skb_top = NULL;
+ 	}
+ 
+@@ -934,13 +934,13 @@ static int e1000_intr_msi(rtdm_irq_t *irq_handle)
+ 		 */
+ 		if ((adapter->flags & FLAG_LSC_GIG_SPEED_DROP) &&
+ 		    (!(er32(STATUS) & E1000_STATUS_LU)))
+-			schedule_work(&adapter->downshift_task);
++			rtdm_schedule_nrt_work(&adapter->downshift_task);
+ 
+ 		/* 80003ES2LAN workaround-- For packet buffer work-around on
+ 		 * link down event; disable receives here in the ISR and reset
+ 		 * adapter in watchdog
+ 		 */
+-		if (netif_carrier_ok(adapter->netdev) &&
++		if (rtnetif_carrier_ok(adapter->netdev) &&
+ 		    adapter->flags & FLAG_RX_NEEDS_RESTART) {
+ 			/* disable receives */
+ 			u32 rctl = er32(RCTL);
+@@ -963,7 +963,7 @@ static int e1000_intr_msi(rtdm_irq_t *irq_handle)
+ 		    FIELD_GET(E1000_PBECCSTS_UNCORR_ERR_CNT_MASK, pbeccsts);
+ 
+ 		/* Do the reset outside of interrupt context */
+-		schedule_work(&adapter->reset_task);
++		rtdm_schedule_nrt_work(&adapter->reset_task);
+ 
+ 		/* return immediately since reset is imminent */
+ 		return RTDM_IRQ_HANDLED;
+@@ -1018,7 +1018,7 @@ static int e1000_intr(rtdm_irq_t *irq_handle)
+ 		 * disable receives here in the ISR and
+ 		 * reset adapter in watchdog
+ 		 */
+-		if (netif_carrier_ok(adapter->netdev) &&
++		if (rtnetif_carrier_ok(adapter->netdev) &&
+ 		    (adapter->flags & FLAG_RX_NEEDS_RESTART)) {
+ 			/* disable receives */
+ 			rctl = er32(RCTL);
+@@ -1061,7 +1061,7 @@ static int e1000_intr(rtdm_irq_t *irq_handle)
+ static irqreturn_t e1000_msix_other(int __always_unused irq, void *data)
+ {
+ 	struct rtnet_device *netdev = data;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 icr = er32(ICR);
+ 
+@@ -1711,7 +1711,7 @@ err:
+ static int e1000_vlan_rx_add_vid(struct rtnet_device *netdev,
+ 				 __always_unused __be16 proto, u16 vid)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 vfta, index;
+ 
+@@ -1737,7 +1737,7 @@ static int e1000_vlan_rx_add_vid(struct rtnet_device *netdev,
+ static int e1000_vlan_rx_kill_vid(struct rtnet_device *netdev,
+ 				  __always_unused __be16 proto, u16 vid)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 vfta, index;
+ 
+@@ -2282,7 +2282,7 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
+  **/
+ static void e1000e_set_rx_mode(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 rctl;
+ 
+@@ -2700,7 +2700,7 @@ void e1000e_reset(struct e1000_adapter *adapter)
+ 
+ 	e1000e_reset_adaptive(hw);
+ 
+-	if (!netif_running(adapter->netdev) &&
++	if (!rtnetif_running(adapter->netdev) &&
+ 	    !test_bit(__E1000_TESTING, &adapter->state))
+ 		e1000_power_down_phy(adapter);
+ 
+@@ -2805,7 +2805,7 @@ void e1000e_down(struct e1000_adapter *adapter, bool reset)
+ 	 */
+ 	set_bit(__E1000_DOWN, &adapter->state);
+ 
+-	netif_carrier_off(netdev);
++	rtnetif_carrier_off(netdev);
+ 
+ 	/* disable receives in the hardware */
+ 	rctl = er32(RCTL);
+@@ -2813,7 +2813,7 @@ void e1000e_down(struct e1000_adapter *adapter, bool reset)
+ 		ew32(RCTL, rctl & ~E1000_RCTL_EN);
+ 	/* flush and sleep below */
+ 
+-	netif_stop_queue(netdev);
++	rtnetif_stop_queue(netdev);
+ 
+ 	/* disable transmits in the hardware */
+ 	tctl = er32(TCTL);
+@@ -3118,7 +3118,7 @@ static int e1000_test_msi(struct e1000_adapter *adapter)
+  **/
+ int e1000e_open(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	int err;
+ 
+@@ -3126,8 +3126,8 @@ int e1000e_open(struct rtnet_device *netdev)
+ 	if (test_bit(__E1000_TESTING, &adapter->state))
+ 		return -EBUSY;
+ 
+-	netif_carrier_off(netdev);
+-	netif_stop_queue(netdev);
++	rtnetif_carrier_off(netdev);
++	rtnetif_stop_queue(netdev);
+ 
+ 	/* allocate transmit descriptors */
+ 	err = e1000e_setup_tx_resources(adapter->tx_ring);
+@@ -3216,7 +3216,7 @@ err_setup_tx:
+  **/
+ int e1000e_close(struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	int count = E1000_CHECK_RESET_COUNT;
+ 
+ 	while (test_bit(__E1000_RESETTING, &adapter->state) && count--)
+@@ -3224,7 +3224,7 @@ int e1000e_close(struct rtnet_device *netdev)
+ 
+ 	WARN_ON(test_bit(__E1000_RESETTING, &adapter->state));
+ 
+-	if (netif_device_present(netdev)) {
++	if (rtnetif_device_present(netdev)) {
+ 		e1000e_down(adapter, true);
+ 		e1000_free_irq(adapter);
+ 
+@@ -3291,7 +3291,7 @@ static void e1000_update_phy_info(struct timer_list *t)
+ 	if (test_bit(__E1000_DOWN, &adapter->state))
+ 		return;
+ 
+-	schedule_work(&adapter->update_phy_task);
++	rtdm_schedule_nrt_work(&adapter->update_phy_task);
+ }
+ 
+ /**
+@@ -3420,7 +3420,7 @@ static void e1000e_check_82574_phy_workaround(struct e1000_adapter *adapter)
+ 	if (adapter->phy_hang_count > 1) {
+ 		adapter->phy_hang_count = 0;
+ 		e_dbg("PHY appears hung - resetting\n");
+-		schedule_work(&adapter->reset_task);
++		rtdm_schedule_nrt_work(&adapter->reset_task);
+ 	}
+ }
+ 
+@@ -3433,7 +3433,7 @@ static void e1000_watchdog(struct timer_list *t)
+ 	struct e1000_adapter *adapter = from_timer(adapter, t, watchdog_timer);
+ 
+ 	/* Do the rest outside of interrupt context */
+-	schedule_work(&adapter->watchdog_task);
++	rtdm_schedule_nrt_work(&adapter->watchdog_task);
+ 
+ 	/* TODO: make this use queue_delayed_work() */
+ }
+@@ -3455,7 +3455,7 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 		return;
+ 
+ 	link = e1000e_has_link(adapter);
+-	if ((netif_carrier_ok(netdev)) && link) {
++	if ((rtnetif_carrier_ok(netdev)) && link) {
+ 
+ 		e1000e_enable_receives(adapter);
+ 		goto link_up;
+@@ -3466,7 +3466,7 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 		e1000_update_mng_vlan(adapter);
+ 
+ 	if (link) {
+-		if (!netif_carrier_ok(netdev)) {
++		if (!rtnetif_carrier_ok(netdev)) {
+ 			bool txb2b = true;
+ 
+ 			/* Checking if MAC is in DMoff state*/
+@@ -3554,21 +3554,21 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 			if (phy->ops.cfg_on_link_up)
+ 				phy->ops.cfg_on_link_up(hw);
+ 
+-			netif_wake_queue(netdev);
+-			netif_carrier_on(netdev);
++			rtnetif_wake_queue(netdev);
++			rtnetif_carrier_on(netdev);
+ 
+ 			if (!test_bit(__E1000_DOWN, &adapter->state))
+ 				mod_timer(&adapter->phy_info_timer,
+ 					  round_jiffies(jiffies + 2 * HZ));
+ 		}
+ 	} else {
+-		if (netif_carrier_ok(netdev)) {
++		if (rtnetif_carrier_ok(netdev)) {
+ 			adapter->link_speed = 0;
+ 			adapter->link_duplex = 0;
+ 			/* Link status message must follow this format */
+ 			netdev_info(netdev, "NIC Link is Down\n");
+-			netif_carrier_off(netdev);
+-			netif_stop_queue(netdev);
++			rtnetif_carrier_off(netdev);
++			rtnetif_stop_queue(netdev);
+ 			if (!test_bit(__E1000_DOWN, &adapter->state))
+ 				mod_timer(&adapter->phy_info_timer,
+ 					  round_jiffies(jiffies + 2 * HZ));
+@@ -3602,13 +3602,13 @@ link_up:
+ 	 * if there is queued Tx work it cannot be done.  So
+ 	 * reset the controller to flush the Tx packet buffers.
+ 	 */
+-	if (!netif_carrier_ok(netdev) &&
++	if (!rtnetif_carrier_ok(netdev) &&
+ 	    (e1000_desc_unused(tx_ring) + 1 < tx_ring->count))
+ 		adapter->flags |= FLAG_RESTART_NOW;
+ 
+ 	/* If reset is necessary, do it outside of interrupt context. */
+ 	if (adapter->flags & FLAG_RESTART_NOW) {
+-		schedule_work(&adapter->reset_task);
++		rtdm_schedule_nrt_work(&adapter->reset_task);
+ 		/* return immediately since reset is imminent */
+ 		return;
+ 	}
+@@ -3796,7 +3796,7 @@ static int e1000_transfer_dhcp_info(struct e1000_adapter *adapter,
+ static netdev_tx_t e1000_xmit_frame(struct rtskb *skb,
+ 				    struct rtnet_device *netdev)
+ {
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_ring *tx_ring = adapter->tx_ring;
+ 	rtdm_lockctx_t context;
+ 	unsigned int first;
+@@ -3805,12 +3805,12 @@ static netdev_tx_t e1000_xmit_frame(struct rtskb *skb,
+ 	
+ 
+ 	if (test_bit(__E1000_DOWN, &adapter->state)) {
+-		dev_kfree_skb_any(skb);
++		dev_kfree_rtskb(skb);
+ 		return NETDEV_TX_OK;
+ 	}
+ 
+ 	if (skb->len <= 0) {
+-		dev_kfree_skb_any(skb);
++		dev_kfree_rtskb(skb);
+ 		return NETDEV_TX_OK;
+ 	}
+ 
+@@ -3964,15 +3964,15 @@ release:
+ static int e1000e_pm_freeze(struct device *dev)
+ {
+ 	struct rtnet_device *netdev = dev_get_drvdata(dev);
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	bool present;
+ 
+ 	rtnl_lock();
+ 
+-	present = netif_device_present(netdev);
+-	netif_device_detach(netdev);
++	present = rtnetif_device_present(netdev);
++	rtnetif_device_detach(netdev);
+ 
+-	if (present && netif_running(netdev)) {
++	if (present && rtnetif_running(netdev)) {
+ 		int count = E1000_CHECK_RESET_COUNT;
+ 
+ 		while (test_bit(__E1000_RESETTING, &adapter->state) && count--)
+@@ -3997,7 +3997,7 @@ static int e1000e_pm_freeze(struct device *dev)
+ static int __e1000_shutdown(struct pci_dev *pdev, bool runtime)
+ {
+ 	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 ctrl, ctrl_ext, rctl, status, wufc;
+ 	int retval = 0;
+@@ -4232,13 +4232,13 @@ static void e1000e_disable_aspm_locked(struct pci_dev *pdev, u16 state)
+ static int e1000e_pm_thaw(struct device *dev)
+ {
+ 	struct rtnet_device *netdev = dev_get_drvdata(dev);
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	int rc = 0;
+ 
+ 	e1000e_set_interrupt_capability(adapter);
+ 
+ 	rtnl_lock();
+-	if (netif_running(netdev)) {
++	if (rtnetif_running(netdev)) {
+ 		rc = e1000_request_irq(adapter);
+ 		if (rc)
+ 			goto err_irq;
+@@ -4246,7 +4246,7 @@ static int e1000e_pm_thaw(struct device *dev)
+ 		e1000e_up(adapter);
+ 	}
+ 
+-	netif_device_attach(netdev);
++	rtnetif_device_attach(netdev);
+ err_irq:
+ 	rtnl_unlock();
+ 
+@@ -4295,7 +4295,7 @@ static pci_ers_result_t e1000_io_error_detected(struct pci_dev *pdev,
+ static pci_ers_result_t e1000_io_slot_reset(struct pci_dev *pdev)
+ {
+ 	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u16 aspm_disable_flag = 0;
+ 	int err;
+@@ -4340,7 +4340,7 @@ static pci_ers_result_t e1000_io_slot_reset(struct pci_dev *pdev)
+ static void e1000_io_resume(struct pci_dev *pdev)
+ {
+ 	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	e1000_init_manageability_pt(adapter);
+ 
+@@ -4490,7 +4490,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	netdev->irq = pdev->irq;
+ 
+ 	pci_set_drvdata(pdev, netdev);
+-	adapter = netdev_priv(netdev);
++	adapter = netdev->priv;
+ 	hw = &adapter->hw;
+ 	adapter->netdev = netdev;
+ 	adapter->pdev = pdev;
+@@ -4728,12 +4728,12 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 		adapter->flags2 |= FLAG2_ENABLE_S0IX_FLOWS;
+ 
+ 	strscpy(netdev->name, "rteth%d", sizeof(netdev->name));
+-	err = register_netdev(netdev);
++	err = rt_register_rtnetdev(netdev);
+ 	if (err)
+ 		goto err_register;
+ 
+ 	/* carrier off reporting is important to ethtool even BEFORE open */
+-	netif_carrier_off(netdev);
++	rtnetif_carrier_off(netdev);
+ 
+ 	e1000_print_device_info(adapter);
+ 
+@@ -4757,7 +4757,7 @@ err_sw_init:
+ err_flashmap:
+ 	iounmap(adapter->hw.hw_addr);
+ err_ioremap:
+-	free_netdev(netdev);
++	rtdev_free(netdev);
+ err_alloc_etherdev:
+ 	pci_release_mem_regions(pdev);
+ err_pci_reg:
+@@ -4778,7 +4778,7 @@ err_dma:
+ static void e1000_remove(struct pci_dev *pdev)
+ {
+ 	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = netdev->priv;
+ 
+ 	/* The timers may be rescheduled, so explicitly disable them
+ 	 * from being rescheduled.
+@@ -4794,7 +4794,7 @@ static void e1000_remove(struct pci_dev *pdev)
+ 	cancel_work_sync(&adapter->downshift_task);
+ 	cancel_work_sync(&adapter->update_phy_task);
+ 
+-	unregister_netdev(netdev);
++	rt_unregister_rtnetdev(netdev);
+ 
+ 	/* Release control of h/w to f/w.  If f/w is AMT enabled, this
+ 	 * would have already happened in close and is redundant.
+@@ -4811,7 +4811,7 @@ static void e1000_remove(struct pci_dev *pdev)
+ 		iounmap(adapter->hw.flash_address);
+ 	pci_release_mem_regions(pdev);
+ 
+-	free_netdev(netdev);
++	rtdev_free(netdev);
+ 
+ 	pci_disable_device(pdev);
+ }
+-- 
+2.39.2
+

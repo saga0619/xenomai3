@@ -1,0 +1,476 @@
+From 8f05f66e05fe1e8e71e628adf0c093332faef577 Mon Sep 17 00:00:00 2001
+From: Gino Strobbe <G.Strobbe@telenet.be>
+Date: Sat, 1 Jun 2024 08:22:17 +0200
+Subject: [PATCH] [v1 06/12] e1000e: Interrupt handling
+
+Signed-off-by: Gino Strobbe <G.Strobbe@telenet.be>
+---
+ kernel/drivers/net/drivers/e1000e/netdev.c | 220 +++++++++------------
+ 1 file changed, 89 insertions(+), 131 deletions(-)
+
+diff --git a/kernel/drivers/net/drivers/e1000e/netdev.c b/kernel/drivers/net/drivers/e1000e/netdev.c
+index acb9c80af..fa0fa270e 100644
+--- a/kernel/drivers/net/drivers/e1000e/netdev.c
++++ b/kernel/drivers/net/drivers/e1000e/netdev.c
+@@ -975,9 +975,10 @@ static void e1000e_downshift_workaround(struct work_struct *work)
+  **/
+ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
+ {
+-	struct net_device *netdev = data;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = rtdm_irq_get_arg(irq_handle,
++							 struct e1000_adapter);
+ 	struct e1000_hw *hw = &adapter->hw;
++	nanosecs_abs_t time_stamp = rtdm_clock_read();
+ 	u32 icr = er32(ICR);
+ 
+ 	/* read ICR disables interrupts using IAM */
+@@ -994,7 +995,7 @@ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
+ 		 * link down event; disable receives here in the ISR and reset
+ 		 * adapter in watchdog
+ 		 */
+-		if (netif_carrier_ok(netdev) &&
++		if (netif_carrier_ok(adapter->netdev) &&
+ 		    adapter->flags & FLAG_RX_NEEDS_RESTART) {
+ 			/* disable receives */
+ 			u32 rctl = er32(RCTL);
+@@ -1004,7 +1005,7 @@ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
+ 		}
+ 		/* guard against interrupt when we're going down */
+ 		if (!test_bit(__E1000_DOWN, &adapter->state))
+-			mod_timer(&adapter->watchdog_timer, jiffies + 1);
++			rtdm_nrtsig_pend(&adapter->mod_timer_sig);
+ 	}
+ 
+ 	/* Reset on uncorrectable ECC error */
+@@ -1020,18 +1021,15 @@ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
+ 		schedule_work(&adapter->reset_task);
+ 
+ 		/* return immediately since reset is imminent */
+-		return IRQ_HANDLED;
++		return RTDM_IRQ_HANDLED;
+ 	}
+ 
+-	if (napi_schedule_prep(&adapter->napi)) {
+-		adapter->total_tx_bytes = 0;
+-		adapter->total_tx_packets = 0;
+-		adapter->total_rx_bytes = 0;
+-		adapter->total_rx_packets = 0;
+-		__napi_schedule(&adapter->napi);
+-	}
+-
+-	return IRQ_HANDLED;
++	if (!e1000_clean_tx_irq(adapter->tx_ring))
++		/* Ring was not completely cleaned, so fire another interrupt */
++		ew32(ICS, adapter->tx_ring->ims_val);
++	if (e1000_clean_rx_irq(adapter, &time_stamp))
++		rt_mark_stack_mgr(adapter->netdev);
++	return RTDM_IRQ_HANDLED;
+ }
+ 
+ /**
+@@ -1041,19 +1039,20 @@ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
+  **/
+ static irqreturn_t e1000_intr(int __always_unused irq, void *data)
+ {
+-	struct net_device *netdev = data;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = rtdm_irq_get_arg(irq_handle,
++							 struct e1000_adapter);
+ 	struct e1000_hw *hw = &adapter->hw;
++	nanosecs_abs_t time_stamp = rtdm_clock_read();
+ 	u32 rctl, icr = er32(ICR);
+ 
+ 	if (!icr || test_bit(__E1000_DOWN, &adapter->state))
+-		return IRQ_NONE;	/* Not our interrupt */
++		return RTDM_IRQ_NONE;	/* Not our interrupt */
+ 
+ 	/* IMS will not auto-mask if INT_ASSERTED is not set, and if it is
+ 	 * not set, then the adapter didn't send an interrupt
+ 	 */
+ 	if (!(icr & E1000_ICR_INT_ASSERTED))
+-		return IRQ_NONE;
++		return RTDM_IRQ_NONE;
+ 
+ 	/* Interrupt Auto-Mask...upon reading ICR,
+ 	 * interrupts are masked.  No need for the
+@@ -1067,14 +1066,14 @@ static irqreturn_t e1000_intr(int __always_unused irq, void *data)
+ 		 */
+ 		if ((adapter->flags & FLAG_LSC_GIG_SPEED_DROP) &&
+ 		    (!(er32(STATUS) & E1000_STATUS_LU)))
+-			schedule_work(&adapter->downshift_task);
++			rtdm_nrtsig_pend(&adapter->downshift_sig);
+ 
+ 		/* 80003ES2LAN workaround--
+ 		 * For packet buffer work-around on link down event;
+ 		 * disable receives here in the ISR and
+ 		 * reset adapter in watchdog
+ 		 */
+-		if (netif_carrier_ok(netdev) &&
++		if (netif_carrier_ok(adapter->netdev) &&
+ 		    (adapter->flags & FLAG_RX_NEEDS_RESTART)) {
+ 			/* disable receives */
+ 			rctl = er32(RCTL);
+@@ -1083,7 +1082,7 @@ static irqreturn_t e1000_intr(int __always_unused irq, void *data)
+ 		}
+ 		/* guard against interrupt when we're going down */
+ 		if (!test_bit(__E1000_DOWN, &adapter->state))
+-			mod_timer(&adapter->watchdog_timer, jiffies + 1);
++			rtdm_nrtsig_pend(&adapter->mod_timer_sig);
+ 	}
+ 
+ 	/* Reset on uncorrectable ECC error */
+@@ -1096,21 +1095,22 @@ static irqreturn_t e1000_intr(int __always_unused irq, void *data)
+ 		    FIELD_GET(E1000_PBECCSTS_UNCORR_ERR_CNT_MASK, pbeccsts);
+ 
+ 		/* Do the reset outside of interrupt context */
+-		schedule_work(&adapter->reset_task);
++		rtdm_schedule_nrt_work(&adapter->reset_task);
+ 
+ 		/* return immediately since reset is imminent */
+-		return IRQ_HANDLED;
++		return RTDM_IRQ_HANDLED;
+ 	}
+ 
+-	if (napi_schedule_prep(&adapter->napi)) {
+-		adapter->total_tx_bytes = 0;
+-		adapter->total_tx_packets = 0;
+-		adapter->total_rx_bytes = 0;
+-		adapter->total_rx_packets = 0;
+-		__napi_schedule(&adapter->napi);
+-	}
++	if (!e1000_clean_tx_irq(adapter->tx_ring))
++		/* Ring was not completely cleaned, so fire another interrupt */
++		ew32(ICS, adapter->tx_ring->ims_val);
+ 
+-	return IRQ_HANDLED;
++	
++	if (e1000_clean_rx_irq(adapter, &time_stamp))
++		rt_mark_stack_mgr(adapter->netdev);
++
++	
++	return RTDM_IRQ_HANDLED;
+ }
+ 
+ static irqreturn_t e1000_msix_other(int __always_unused irq, void *data)
+@@ -1138,8 +1138,8 @@ static irqreturn_t e1000_msix_other(int __always_unused irq, void *data)
+ 
+ static irqreturn_t e1000_intr_msix_tx(int __always_unused irq, void *data)
+ {
+-	struct net_device *netdev = data;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
++	struct e1000_adapter *adapter = rtdm_irq_get_arg(irq_handle,
++							 struct e1000_adapter);
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	struct e1000_ring *tx_ring = adapter->tx_ring;
+ 
+@@ -1153,32 +1153,31 @@ static irqreturn_t e1000_intr_msix_tx(int __always_unused irq, void *data)
+ 	if (!test_bit(__E1000_DOWN, &adapter->state))
+ 		ew32(IMS, adapter->tx_ring->ims_val);
+ 
+-	return IRQ_HANDLED;
++	return RTDM_IRQ_HANDLED;
+ }
+ 
+ static irqreturn_t e1000_intr_msix_rx(int __always_unused irq, void *data)
+ {
+-	struct net_device *netdev = data;
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
+-	struct e1000_ring *rx_ring = adapter->rx_ring;
++	struct e1000_adapter *adapter = rtdm_irq_get_arg(irq_handle,
++							 struct e1000_adapter);
++	nanosecs_abs_t time_stamp = rtdm_clock_read();
+ 
+ 	/* Write the ITR value calculated at the end of the
+ 	 * previous interrupt.
+ 	 */
+-	if (rx_ring->set_itr) {
+-		u32 itr = rx_ring->itr_val ?
+-			  1000000000 / (rx_ring->itr_val * 256) : 0;
++	if (adapter->rx_ring->set_itr) {
++		u32 itr = adapter->rx_ring->itr_val ?
++			  1000000000 / (adapter->rx_ring->itr_val * 256) : 0;
+ 
+-		writel(itr, rx_ring->itr_register);
+-		rx_ring->set_itr = 0;
++		writel(itr, adapter->rx_ring->itr_register);
++		adapter->rx_ring->set_itr = 0;
+ 	}
+ 
+-	if (napi_schedule_prep(&adapter->napi)) {
+-		adapter->total_rx_bytes = 0;
+-		adapter->total_rx_packets = 0;
+-		__napi_schedule(&adapter->napi);
+-	}
+-	return IRQ_HANDLED;
++	if (e1000_clean_rx_irq(adapter, &time_stamp))
++		rt_mark_stack_mgr(adapter->netdev);
++
++	
++	return RTDM_IRQ_HANDLED;
+ }
+ 
+ /**
+@@ -1242,22 +1241,18 @@ static void e1000_configure_msix(struct e1000_adapter *adapter)
+ 	ew32(IVAR, ivar);
+ 
+ 	/* enable MSI-X PBA support */
+-	ctrl_ext = er32(CTRL_EXT) & ~E1000_CTRL_EXT_IAME;
+-	ctrl_ext |= E1000_CTRL_EXT_PBA_CLR | E1000_CTRL_EXT_EIAME;
++	ctrl_ext = er32(CTRL_EXT) | E1000_CTRL_EXT_IAME;
++	ctrl_ext |= E1000_CTRL_EXT_PBA_CLR;
+ 	ew32(CTRL_EXT, ctrl_ext);
+ 	e1e_flush();
+ }
+ 
+ void e1000e_reset_interrupt_capability(struct e1000_adapter *adapter)
+ {
+-	if (adapter->msix_entries) {
+-		pci_disable_msix(adapter->pdev);
+-		kfree(adapter->msix_entries);
+-		adapter->msix_entries = NULL;
+-	} else if (adapter->flags & FLAG_MSI_ENABLED) {
+-		pci_disable_msi(adapter->pdev);
+-		adapter->flags &= ~FLAG_MSI_ENABLED;
+-	}
++	pci_free_irq_vectors(adapter->pdev);
++
++	adapter->flags &= ~FLAG_HAS_MSIX;
++	adapter->flags &= ~FLAG_MSI_ENABLED;
+ }
+ 
+ /**
+@@ -1334,9 +1329,10 @@ static int e1000_request_msix(struct e1000_adapter *adapter)
+ 			 "%.14s-rx-0", netdev->name);
+ 	else
+ 		memcpy(adapter->rx_ring->name, netdev->name, IFNAMSIZ);
+-	err = request_irq(adapter->msix_entries[vector].vector,
+-			  e1000_intr_msix_rx, 0, adapter->rx_ring->name,
+-			  netdev);
++	err = rtdm_irq_request(&adapter->rx_irq_handle,
++			       pci_irq_vector(adapter->pdev, vector),
++			       e1000_intr_msix_rx, 0, adapter->rx_ring->name,
++			       adapter);
+ 	if (err)
+ 		return err;
+ 	adapter->rx_ring->itr_register = adapter->hw.hw_addr +
+@@ -1350,9 +1346,10 @@ static int e1000_request_msix(struct e1000_adapter *adapter)
+ 			 "%.14s-tx-0", netdev->name);
+ 	else
+ 		memcpy(adapter->tx_ring->name, netdev->name, IFNAMSIZ);
+-	err = request_irq(adapter->msix_entries[vector].vector,
+-			  e1000_intr_msix_tx, 0, adapter->tx_ring->name,
+-			  netdev);
++	err = rtdm_irq_request(&adapter->tx_irq_handle,
++			       pci_irq_vector(adapter->pdev, vector),
++			       e1000_intr_msix_tx, 0, adapter->tx_ring->name,
++			       adapter);
+ 	if (err)
+ 		return err;
+ 	adapter->tx_ring->itr_register = adapter->hw.hw_addr +
+@@ -1360,7 +1357,7 @@ static int e1000_request_msix(struct e1000_adapter *adapter)
+ 	adapter->tx_ring->itr_val = adapter->itr;
+ 	vector++;
+ 
+-	err = request_irq(adapter->msix_entries[vector].vector,
++	err = request_irq(pci_irq_vector(adapter->pdev, vector),
+ 			  e1000_msix_other, 0, netdev->name, netdev);
+ 	if (err)
+ 		return err;
+@@ -1412,23 +1409,27 @@ static int e1000_request_irq(struct e1000_adapter *adapter)
+ 
+ static void e1000_free_irq(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
+-
+-	if (adapter->msix_entries) {
++	if (adapter->flags & FLAG_HAS_MSIX) {
++		struct net_device *netdev = adapter->netdev;
+ 		int vector = 0;
+ 
+-		free_irq(adapter->msix_entries[vector].vector, netdev);
++		rtdm_irq_disable(&adapter->rx_irq_handle);
++		rtdm_irq_free(&adapter->rx_irq_handle);
+ 		vector++;
+ 
+-		free_irq(adapter->msix_entries[vector].vector, netdev);
++		rtdm_irq_disable(&adapter->tx_irq_handle);
++		rtdm_irq_free(&adapter->tx_irq_handle);
+ 		vector++;
+ 
+ 		/* Other Causes interrupt vector */
+-		free_irq(adapter->msix_entries[vector].vector, netdev);
++		free_irq(pci_irq_vector(adapter->pdev, vector), netdev);
+ 		return;
+ 	}
+ 
+-	free_irq(adapter->pdev->irq, netdev);
++	if (adapter->flags & FLAG_MSI_ENABLED)
++		rtdm_irq_disable(&adapter->irq_handle);
++
++	rtdm_irq_free(&adapter->irq_handle);
+ }
+ 
+ /**
+@@ -1440,17 +1441,17 @@ static void e1000_irq_disable(struct e1000_adapter *adapter)
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+ 	ew32(IMC, ~0);
+-	if (adapter->msix_entries)
++	if (adapter->flags & FLAG_HAS_MSIX)
+ 		ew32(EIAC_82574, 0);
+ 	e1e_flush();
+ 
+-	if (adapter->msix_entries) {
++	if (adapter->flags & FLAG_HAS_MSIX) {
+ 		int i;
+ 
+ 		for (i = 0; i < adapter->num_vectors; i++)
+-			synchronize_irq(adapter->msix_entries[i].vector);
++			synchronize_irq(pci_irq_vector(adapter->pdev, i));
+ 	} else {
+-		synchronize_irq(adapter->pdev->irq);
++		synchronize_irq(pci_irq_vector(adapter->pdev, 0));
+ 	}
+ }
+ 
+@@ -1462,7 +1463,7 @@ static void e1000_irq_enable(struct e1000_adapter *adapter)
+ {
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+-	if (adapter->msix_entries) {
++	if (adapter->flags & FLAG_HAS_MSIX) {
+ 		ew32(EIAC_82574, adapter->eiac_mask & E1000_EIAC_MASK_82574);
+ 		ew32(IMS, adapter->eiac_mask | E1000_IMS_OTHER |
+ 		     IMS_OTHER_MASK);
+@@ -1636,7 +1637,6 @@ err:
+  **/
+ static void e1000_clean_tx_ring(struct e1000_ring *tx_ring)
+ {
+-	struct e1000_adapter *adapter = tx_ring->adapter;
+ 	struct e1000_buffer *buffer_info;
+ 	unsigned long size;
+ 	unsigned int i;
+@@ -1646,7 +1646,6 @@ static void e1000_clean_tx_ring(struct e1000_ring *tx_ring)
+ 		e1000_put_txbuf(tx_ring, buffer_info, false);
+ 	}
+ 
+-	netdev_reset_queue(adapter->netdev);
+ 	size = sizeof(struct e1000_buffer) * tx_ring->count;
+ 	memset(tx_ring->buffer_info, 0, size);
+ 
+@@ -2251,23 +2250,11 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	struct e1000_ring *rx_ring = adapter->rx_ring;
+ 	u64 rdba;
+-	u32 rdlen, rctl, rxcsum, ctrl_ext;
++	u32 rdlen, rctl, rxcsum;
+ 
+-	if (adapter->rx_ps_pages) {
+-		/* this is a 32 byte descriptor */
+-		rdlen = rx_ring->count *
+-		    sizeof(union e1000_rx_desc_packet_split);
+-		adapter->clean_rx = e1000_clean_rx_irq_ps;
+-		adapter->alloc_rx_buf = e1000_alloc_rx_buffers_ps;
+-	} else if (adapter->netdev->mtu > ETH_FRAME_LEN + ETH_FCS_LEN) {
+-		rdlen = rx_ring->count * sizeof(union e1000_rx_desc_extended);
+-		adapter->clean_rx = e1000_clean_jumbo_rx_irq;
+-		adapter->alloc_rx_buf = e1000_alloc_jumbo_rx_buffers;
+-	} else {
+-		rdlen = rx_ring->count * sizeof(union e1000_rx_desc_extended);
+-		adapter->clean_rx = e1000_clean_rx_irq;
+-		adapter->alloc_rx_buf = e1000_alloc_rx_buffers;
+-	}
++	rdlen = rx_ring->count * sizeof(union e1000_rx_desc_extended);
++	adapter->clean_rx = e1000_clean_rx_irq;
++	adapter->alloc_rx_buf = e1000_alloc_rx_buffers;
+ 
+ 	/* disable receives while setting up the descriptors */
+ 	rctl = er32(RCTL);
+@@ -2297,11 +2284,6 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
+ 	if ((adapter->itr_setting != 0) && (adapter->itr != 0))
+ 		e1000e_write_itr(adapter, adapter->itr);
+ 
+-	ctrl_ext = er32(CTRL_EXT);
+-	/* Auto-Mask interrupts upon ICR access */
+-	ctrl_ext |= E1000_CTRL_EXT_IAME;
+-	ew32(IAM, 0xffffffff);
+-	ew32(CTRL_EXT, ctrl_ext);
+ 	e1e_flush();
+ 
+ 	/* Setup the HW Rx Head and Tail Descriptor Pointers and
+@@ -2330,28 +2312,6 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
+ 		rxcsum &= ~E1000_RXCSUM_TUOFL;
+ 	ew32(RXCSUM, rxcsum);
+ 
+-	/* With jumbo frames, excessive C-state transition latencies result
+-	 * in dropped transactions.
+-	 */
+-	if (adapter->netdev->mtu > ETH_DATA_LEN) {
+-		u32 lat =
+-		    ((er32(PBA) & E1000_PBA_RXA_MASK) * 1024 -
+-		     adapter->max_frame_size) * 8 / 1000;
+-
+-		if (adapter->flags & FLAG_IS_ICH) {
+-			u32 rxdctl = er32(RXDCTL(0));
+-
+-			ew32(RXDCTL(0), rxdctl | 0x3 | BIT(8));
+-		}
+-
+-		dev_info(&adapter->pdev->dev,
+-			 "Some CPU C-states have been disabled in order to enable jumbo frames\n");
+-		cpu_latency_qos_update_request(&adapter->pm_qos_req, lat);
+-	} else {
+-		cpu_latency_qos_update_request(&adapter->pm_qos_req,
+-					       PM_QOS_DEFAULT_VALUE);
+-	}
+-
+ 	/* Enable Receives */
+ 	ew32(RCTL, rctl);
+ }
+@@ -2382,8 +2342,6 @@ static void e1000e_set_rx_mode(struct net_device *netdev)
+ 		/* Do not hardware filter VLANs in promisc mode */
+ 		e1000e_vlan_filter_disable(adapter);
+ 	} else {
+-		int count;
+-
+ 		if (netdev->flags & IFF_ALLMULTI) {
+ 			rctl |= E1000_RCTL_MPE;
+ 		} else {
+@@ -2391,18 +2349,18 @@ static void e1000e_set_rx_mode(struct net_device *netdev)
+ 			 * then we should just turn on promiscuous mode so
+ 			 * that we can at least receive multicast traffic
+ 			 */
+-			count = e1000e_write_mc_addr_list(netdev);
+-			if (count < 0)
+-				rctl |= E1000_RCTL_MPE;
++			/* Turn on promiscuous mode so
++			 * that we can at least receive multicast traffic
++			 */
++			rctl |= E1000_RCTL_MPE;
+ 		}
+ 		e1000e_vlan_filter_enable(adapter);
++		// Enable unicast promiscuous mode 
+ 		/* Write addresses to available RAR registers, if there is not
+ 		 * sufficient space to store all the addresses then enable
+ 		 * unicast promiscuous mode
+ 		 */
+-		count = e1000e_write_uc_addr_list(netdev);
+-		if (count < 0)
+-			rctl |= E1000_RCTL_UPE;
++		rctl |= E1000_RCTL_UPE;
+ 	}
+ 
+ 	ew32(RCTL, rctl);
+@@ -3110,7 +3068,7 @@ static int e1000_test_msi_interrupt(struct e1000_adapter *adapter)
+ 	/* clear any pending events */
+ 	er32(ICR);
+ 
+-	/* free the real vector and request a test handler */
++	/* free the real vector */
+ 	e1000_free_irq(adapter);
+ 	e1000e_reset_interrupt_capability(adapter);
+ 
+-- 
+2.39.2
+

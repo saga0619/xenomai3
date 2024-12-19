@@ -1,0 +1,715 @@
+From 61a45855e35e5a25342a8615ceb878441bb0cbcf Mon Sep 17 00:00:00 2001
+From: Gino Strobbe <G.Strobbe@telenet.be>
+Date: Sat, 1 Jun 2024 08:23:01 +0200
+Subject: [PATCH] [v1 08/12] e1000e: Data type transformations
+
+Signed-off-by: Gino Strobbe <G.Strobbe@telenet.be>
+---
+ kernel/drivers/net/drivers/e1000e/e1000.h   | 21 +++---
+ kernel/drivers/net/drivers/e1000e/ethtool.c | 74 +++++++++++----------
+ kernel/drivers/net/drivers/e1000e/netdev.c  | 68 +++++++++----------
+ 3 files changed, 85 insertions(+), 78 deletions(-)
+
+diff --git a/kernel/drivers/net/drivers/e1000e/e1000.h b/kernel/drivers/net/drivers/e1000e/e1000.h
+index 95a2aa251..9b63562ec 100644
+--- a/kernel/drivers/net/drivers/e1000e/e1000.h
++++ b/kernel/drivers/net/drivers/e1000e/e1000.h
+@@ -130,7 +130,7 @@ struct e1000_ps_page {
+  */
+ struct e1000_buffer {
+ 	dma_addr_t dma;
+-	struct sk_buff *skb;
++	struct rtskb *skb;
+ 	union {
+ 		/* Tx */
+ 		struct {
+@@ -172,7 +172,7 @@ struct e1000_ring {
+ 	void __iomem *itr_register;
+ 	int set_itr;
+ 
+-	struct sk_buff *rx_skb_top;
++	struct rtskb *rx_skb_top;
+ 	rtdm_lock_t lock;
+ };
+ 
+@@ -276,8 +276,12 @@ struct e1000_adapter {
+ 	u32 min_frame_size;
+ 
+ 	/* OS defined structs */
+-	struct net_device *netdev;
++	struct rtnet_device *netdev;
+ 	struct pci_dev *pdev;
++
++	rtdm_irq_t irq_handle;
++	rtdm_irq_t rx_irq_handle;
++	rtdm_irq_t tx_irq_handle;
+ 	rtdm_nrtsig_t mod_timer_sig;
+ 	rtdm_nrtsig_t downshift_sig;
+ 
+@@ -310,6 +314,7 @@ struct e1000_adapter {
+ 
+ 	unsigned int flags;
+ 	unsigned int flags2;
++	unsigned int pci_irq;
+ 	struct work_struct downshift_task;
+ 	struct work_struct update_phy_task;
+ 	struct work_struct print_hang_task;
+@@ -323,7 +328,7 @@ struct e1000_info {
+ 	unsigned int		flags2;
+ 	u32			pba;
+ 	u32			max_hw_frame_size;
+-	s32			(*get_variants)(struct e1000_adapter *);
++	s32			(*get_variants)(struct e1000_adapter *adapter);
+ 	const struct e1000_mac_operations *mac_ops;
+ 	const struct e1000_phy_operations *phy_ops;
+ 	const struct e1000_nvm_operations *nvm_ops;
+@@ -469,10 +474,10 @@ enum latency_range {
+ extern char e1000e_driver_name[];
+ 
+ void e1000e_check_options(struct e1000_adapter *adapter);
+-void e1000e_set_ethtool_ops(struct net_device *netdev);
++void e1000e_set_ethtool_ops(struct rtnet_device *netdev);
+ 
+-int e1000e_open(struct net_device *netdev);
+-int e1000e_close(struct net_device *netdev);
++int e1000e_open(struct rtnet_device *netdev);
++int e1000e_close(struct rtnet_device *netdev);
+ void e1000e_up(struct e1000_adapter *adapter);
+ void e1000e_down(struct e1000_adapter *adapter, bool reset);
+ void e1000e_reinit_locked(struct e1000_adapter *adapter);
+@@ -482,7 +487,7 @@ int e1000e_setup_rx_resources(struct e1000_ring *ring);
+ int e1000e_setup_tx_resources(struct e1000_ring *ring);
+ void e1000e_free_rx_resources(struct e1000_ring *ring);
+ void e1000e_free_tx_resources(struct e1000_ring *ring);
+-void e1000e_get_stats64(struct net_device *netdev,
++void e1000e_get_stats64(struct rtnet_device *netdev,
+ 			struct rtnl_link_stats64 *stats);
+ void e1000e_set_interrupt_capability(struct e1000_adapter *adapter);
+ void e1000e_reset_interrupt_capability(struct e1000_adapter *adapter);
+diff --git a/kernel/drivers/net/drivers/e1000e/ethtool.c b/kernel/drivers/net/drivers/e1000e/ethtool.c
+index d3311aa0c..8020034ce 100644
+--- a/kernel/drivers/net/drivers/e1000e/ethtool.c
++++ b/kernel/drivers/net/drivers/e1000e/ethtool.c
+@@ -108,7 +108,7 @@ static const char e1000_gstrings_test[][ETH_GSTRING_LEN] = {
+ 
+ #define E1000_TEST_LEN ARRAY_SIZE(e1000_gstrings_test)
+ 
+-static int e1000_get_link_ksettings(struct net_device *netdev,
++static int e1000_get_link_ksettings(struct rtnet_device *netdev,
+ 				    struct ethtool_link_ksettings *cmd)
+ {
+ 	u32 speed, supported, advertising, lp_advertising, lpa_t;
+@@ -264,7 +264,7 @@ err_inval:
+ 	return -EINVAL;
+ }
+ 
+-static int e1000_set_link_ksettings(struct net_device *netdev,
++static int e1000_set_link_ksettings(struct rtnet_device *netdev,
+ 				    const struct ethtool_link_ksettings *cmd)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -353,7 +353,7 @@ out:
+ 	return ret_val;
+ }
+ 
+-static void e1000_get_pauseparam(struct net_device *netdev,
++static void e1000_get_pauseparam(struct rtnet_device *netdev,
+ 				 struct ethtool_pauseparam *pause)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -372,7 +372,7 @@ static void e1000_get_pauseparam(struct net_device *netdev,
+ 	}
+ }
+ 
+-static int e1000_set_pauseparam(struct net_device *netdev,
++static int e1000_set_pauseparam(struct rtnet_device *netdev,
+ 				struct ethtool_pauseparam *pause)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -423,27 +423,27 @@ out:
+ 	return retval;
+ }
+ 
+-static u32 e1000_get_msglevel(struct net_device *netdev)
++static u32 e1000_get_msglevel(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+ 	return adapter->msg_enable;
+ }
+ 
+-static void e1000_set_msglevel(struct net_device *netdev, u32 data)
++static void e1000_set_msglevel(struct rtnet_device *netdev, u32 data)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+ 	adapter->msg_enable = data;
+ }
+ 
+-static int e1000_get_regs_len(struct net_device __always_unused *netdev)
++static int e1000_get_regs_len(struct rtnet_device __always_unused *netdev)
+ {
+ #define E1000_REGS_LEN 32	/* overestimate */
+ 	return E1000_REGS_LEN * sizeof(u32);
+ }
+ 
+-static void e1000_get_regs(struct net_device *netdev,
++static void e1000_get_regs(struct rtnet_device *netdev,
+ 			   struct ethtool_regs *regs, void *p)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -502,14 +502,14 @@ static void e1000_get_regs(struct net_device *netdev,
+ 	pm_runtime_put_sync(netdev->dev.parent);
+ }
+ 
+-static int e1000_get_eeprom_len(struct net_device *netdev)
++static int e1000_get_eeprom_len(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+ 	return adapter->hw.nvm.word_size * 2;
+ }
+ 
+-static int e1000_get_eeprom(struct net_device *netdev,
++static int e1000_get_eeprom(struct rtnet_device *netdev,
+ 			    struct ethtool_eeprom *eeprom, u8 *bytes)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -566,7 +566,7 @@ static int e1000_get_eeprom(struct net_device *netdev,
+ 	return ret_val;
+ }
+ 
+-static int e1000_set_eeprom(struct net_device *netdev,
++static int e1000_set_eeprom(struct rtnet_device *netdev,
+ 			    struct ethtool_eeprom *eeprom, u8 *bytes)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -646,7 +646,7 @@ out:
+ 	return ret_val;
+ }
+ 
+-static void e1000_get_drvinfo(struct net_device *netdev,
++static void e1000_get_drvinfo(struct rtnet_device *netdev,
+ 			      struct ethtool_drvinfo *drvinfo)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -666,7 +666,7 @@ static void e1000_get_drvinfo(struct net_device *netdev,
+ 		sizeof(drvinfo->bus_info));
+ }
+ 
+-static void e1000_get_ringparam(struct net_device *netdev,
++static void e1000_get_ringparam(struct rtnet_device *netdev,
+ 				struct ethtool_ringparam *ring,
+ 				struct kernel_ethtool_ringparam *kernel_ring,
+ 				struct netlink_ext_ack *extack)
+@@ -679,7 +679,7 @@ static void e1000_get_ringparam(struct net_device *netdev,
+ 	ring->tx_pending = adapter->tx_ring_count;
+ }
+ 
+-static int e1000_set_ringparam(struct net_device *netdev,
++static int e1000_set_ringparam(struct rtnet_device *netdev,
+ 			       struct ethtool_ringparam *ring,
+ 			       struct kernel_ethtool_ringparam *kernel_ring,
+ 			       struct netlink_ext_ack *extack)
+@@ -995,7 +995,7 @@ static int e1000_eeprom_test(struct e1000_adapter *adapter, u64 *data)
+ 
+ static irqreturn_t e1000_test_intr(int __always_unused irq, void *data)
+ {
+-	struct net_device *netdev = (struct net_device *)data;
++	struct rtnet_device *netdev = (struct rtnet_device *)data;
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+@@ -1006,7 +1006,7 @@ static irqreturn_t e1000_test_intr(int __always_unused irq, void *data)
+ 
+ static int e1000_intr_test(struct e1000_adapter *adapter, u64 *data)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 mask;
+ 	u32 shared_int = 1;
+@@ -1228,7 +1228,7 @@ static int e1000_setup_desc_rings(struct e1000_adapter *adapter)
+ 
+ 	for (i = 0; i < tx_ring->count; i++) {
+ 		struct e1000_tx_desc *tx_desc = E1000_TX_DESC(*tx_ring, i);
+-		struct sk_buff *skb;
++		struct rtskb *skb;
+ 		unsigned int skb_size = 1024;
+ 
+ 		skb = alloc_skb(skb_size, GFP_KERNEL);
+@@ -1294,7 +1294,7 @@ static int e1000_setup_desc_rings(struct e1000_adapter *adapter)
+ 
+ 	for (i = 0; i < rx_ring->count; i++) {
+ 		union e1000_rx_desc_extended *rx_desc;
+-		struct sk_buff *skb;
++		struct rtskb *skb;
+ 
+ 		skb = alloc_skb(2048 + NET_IP_ALIGN, GFP_KERNEL);
+ 		if (!skb) {
+@@ -1632,7 +1632,7 @@ static void e1000_loopback_cleanup(struct e1000_adapter *adapter)
+ 	}
+ }
+ 
+-static void e1000_create_lbtest_frame(struct sk_buff *skb,
++static void e1000_create_lbtest_frame(struct rtskb *skb,
+ 				      unsigned int frame_size)
+ {
+ 	memset(skb->data, 0xFF, frame_size);
+@@ -1642,7 +1642,7 @@ static void e1000_create_lbtest_frame(struct sk_buff *skb,
+ 	skb->data[frame_size / 2 + 12] = 0xAF;
+ }
+ 
+-static int e1000_check_lbtest_frame(struct sk_buff *skb,
++static int e1000_check_lbtest_frame(struct rtskb *skb,
+ 				    unsigned int frame_size)
+ {
+ 	frame_size &= ~1;
+@@ -1796,7 +1796,7 @@ static int e1000_link_test(struct e1000_adapter *adapter, u64 *data)
+ 	return *data;
+ }
+ 
+-static int e1000e_get_sset_count(struct net_device __always_unused *netdev,
++static int e1000e_get_sset_count(struct rtnet_device __always_unused *netdev,
+ 				 int sset)
+ {
+ 	switch (sset) {
+@@ -1811,7 +1811,7 @@ static int e1000e_get_sset_count(struct net_device __always_unused *netdev,
+ 	}
+ }
+ 
+-static void e1000_diag_test(struct net_device *netdev,
++static void e1000_diag_test(struct rtnet_device *netdev,
+ 			    struct ethtool_test *eth_test, u64 *data)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -1911,7 +1911,7 @@ static void e1000_diag_test(struct net_device *netdev,
+ 	pm_runtime_put_sync(netdev->dev.parent);
+ }
+ 
+-static void e1000_get_wol(struct net_device *netdev,
++static void e1000_get_wol(struct rtnet_device *netdev,
+ 			  struct ethtool_wolinfo *wol)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -1946,7 +1946,8 @@ static void e1000_get_wol(struct net_device *netdev,
+ 		wol->wolopts |= WAKE_PHY;
+ }
+ 
+-static int e1000_set_wol(struct net_device *netdev, struct ethtool_wolinfo *wol)
++static int e1000_set_wol(struct rtnet_device *netdev,
++			 struct ethtool_wolinfo *wol)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+@@ -1975,7 +1976,7 @@ static int e1000_set_wol(struct net_device *netdev, struct ethtool_wolinfo *wol)
+ 	return 0;
+ }
+ 
+-static int e1000_set_phys_id(struct net_device *netdev,
++static int e1000_set_phys_id(struct rtnet_device *netdev,
+ 			     enum ethtool_phys_id_state state)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -2011,7 +2012,7 @@ static int e1000_set_phys_id(struct net_device *netdev,
+ 	return 0;
+ }
+ 
+-static int e1000_get_coalesce(struct net_device *netdev,
++static int e1000_get_coalesce(struct rtnet_device *netdev,
+ 			      struct ethtool_coalesce *ec,
+ 			      struct kernel_ethtool_coalesce *kernel_coal,
+ 			      struct netlink_ext_ack *extack)
+@@ -2026,7 +2027,7 @@ static int e1000_get_coalesce(struct net_device *netdev,
+ 	return 0;
+ }
+ 
+-static int e1000_set_coalesce(struct net_device *netdev,
++static int e1000_set_coalesce(struct rtnet_device *netdev,
+ 			      struct ethtool_coalesce *ec,
+ 			      struct kernel_ethtool_coalesce *kernel_coal,
+ 			      struct netlink_ext_ack *extack)
+@@ -2062,7 +2063,7 @@ static int e1000_set_coalesce(struct net_device *netdev,
+ 	return 0;
+ }
+ 
+-static int e1000_nway_reset(struct net_device *netdev)
++static int e1000_nway_reset(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+@@ -2079,7 +2080,7 @@ static int e1000_nway_reset(struct net_device *netdev)
+ 	return 0;
+ }
+ 
+-static void e1000_get_ethtool_stats(struct net_device *netdev,
++static void e1000_get_ethtool_stats(struct rtnet_device *netdev,
+ 				    struct ethtool_stats __always_unused *stats,
+ 				    u64 *data)
+ {
+@@ -2114,7 +2115,7 @@ static void e1000_get_ethtool_stats(struct net_device *netdev,
+ 	}
+ }
+ 
+-static void e1000_get_strings(struct net_device __always_unused *netdev,
++static void e1000_get_strings(struct rtnet_device __always_unused *netdev,
+ 			      u32 stringset, u8 *data)
+ {
+ 	u8 *p = data;
+@@ -2138,7 +2139,7 @@ static void e1000_get_strings(struct net_device __always_unused *netdev,
+ 	}
+ }
+ 
+-static int e1000_get_rxnfc(struct net_device *netdev,
++static int e1000_get_rxnfc(struct rtnet_device *netdev,
+ 			   struct ethtool_rxnfc *info,
+ 			   u32 __always_unused *rule_locs)
+ {
+@@ -2190,7 +2191,8 @@ static int e1000_get_rxnfc(struct net_device *netdev,
+ 	}
+ }
+ 
+-static int e1000e_get_eee(struct net_device *netdev, struct ethtool_keee *edata)
++static int e1000e_get_eee(struct rtnet_device *netdev,
++			  struct ethtool_keee *edata)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+@@ -2316,7 +2318,7 @@ static int e1000e_set_eee(struct net_device *netdev, struct ethtool_keee *edata)
+ 	return 0;
+ }
+ 
+-static int e1000e_get_ts_info(struct net_device *netdev,
++static int e1000e_get_ts_info(struct rtnet_device *netdev,
+ 			      struct ethtool_ts_info *info)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -2350,7 +2352,7 @@ static int e1000e_get_ts_info(struct net_device *netdev,
+ 	return 0;
+ }
+ 
+-static u32 e1000e_get_priv_flags(struct net_device *netdev)
++static u32 e1000e_get_priv_flags(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	u32 priv_flags = 0;
+@@ -2361,7 +2363,7 @@ static u32 e1000e_get_priv_flags(struct net_device *netdev)
+ 	return priv_flags;
+ }
+ 
+-static int e1000e_set_priv_flags(struct net_device *netdev, u32 priv_flags)
++static int e1000e_set_priv_flags(struct rtnet_device *netdev, u32 priv_flags)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	unsigned int flags2 = adapter->flags2;
+@@ -2416,7 +2418,7 @@ static const struct ethtool_ops e1000_ethtool_ops = {
+ 	.set_priv_flags		= e1000e_set_priv_flags,
+ };
+ 
+-void e1000e_set_ethtool_ops(struct net_device *netdev)
++void e1000e_set_ethtool_ops(struct rtnet_device *netdev)
+ {
+ 	netdev->ethtool_ops = &e1000_ethtool_ops;
+ }
+diff --git a/kernel/drivers/net/drivers/e1000e/netdev.c b/kernel/drivers/net/drivers/e1000e/netdev.c
+index fd479168c..a2761a828 100644
+--- a/kernel/drivers/net/drivers/e1000e/netdev.c
++++ b/kernel/drivers/net/drivers/e1000e/netdev.c
+@@ -193,7 +193,7 @@ static void e1000e_dump_ps_pages(struct e1000_adapter *adapter,
+  **/
+ static void e1000e_dump(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	struct e1000_reg_info *reginfo;
+ 	struct e1000_ring *tx_ring = adapter->tx_ring;
+@@ -499,7 +499,7 @@ static int e1000_desc_unused(struct e1000_ring *ring)
+  * @skb: socket buffer with received data
+  **/
+ static void e1000_rx_checksum(struct e1000_adapter *adapter, u32 status_err,
+-			      struct sk_buff *skb)
++			      struct rtskb *skb)
+ {
+ 	u16 status = (u16)status_err;
+ 	u8 errors = (u8)(status_err >> 24);
+@@ -572,11 +572,11 @@ static void e1000_alloc_rx_buffers(struct e1000_ring *rx_ring,
+ 				   int cleaned_count, gfp_t gfp)
+ {
+ 	struct e1000_adapter *adapter = rx_ring->adapter;
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct pci_dev *pdev = adapter->pdev;
+ 	union e1000_rx_desc_extended *rx_desc;
+ 	struct e1000_buffer *buffer_info;
+-	struct sk_buff *skb;
++	struct rtskb *skb;
+ 	unsigned int i;
+ 	unsigned int bufsz = adapter->rx_buffer_len;
+ 
+@@ -644,7 +644,7 @@ map_skb:
+ static bool e1000_clean_rx_irq(struct e1000_adapter *adapter,
+ 			       nanosecs_abs_t *time_stamp)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_ring *rx_ring = adapter->rx_ring;
+ 	union e1000_rx_desc_extended *rx_desc, *next_rxd;
+ 	struct e1000_buffer *buffer_info, *next_buffer;
+@@ -660,7 +660,7 @@ static bool e1000_clean_rx_irq(struct e1000_adapter *adapter,
+ 	buffer_info = &rx_ring->buffer_info[i];
+ 
+ 	while (staterr & E1000_RXD_STAT_DD) {
+-		struct sk_buff *skb;
++		struct rtskb *skb;
+ 
+ 		/* read descriptor and rx_buffer_info after status DD */
+ 		dma_rmb();
+@@ -784,7 +784,7 @@ static void e1000_put_txbuf(struct e1000_ring *tx_ring,
+ static bool e1000_clean_tx_irq(struct e1000_ring *tx_ring)
+ {
+ 	struct e1000_adapter *adapter = tx_ring->adapter;
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	struct e1000_tx_desc *tx_desc, *eop_desc;
+ 	struct e1000_buffer *buffer_info;
+@@ -1060,7 +1060,7 @@ static int e1000_intr(rtdm_irq_t *irq_handle)
+ 
+ static irqreturn_t e1000_msix_other(int __always_unused irq, void *data)
+ {
+-	struct net_device *netdev = data;
++	struct rtnet_device *netdev = data;
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 icr = er32(ICR);
+@@ -1270,7 +1270,7 @@ void e1000e_set_interrupt_capability(struct e1000_adapter *adapter)
+  **/
+ static int e1000_request_msix(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	int err = 0, vector = 0;
+ 
+ 	if (strlen(netdev->name) < (IFNAMSIZ - 5))
+@@ -1326,7 +1326,7 @@ static int e1000_request_msix(struct e1000_adapter *adapter)
+  **/
+ static int e1000_request_irq(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	int err;
+ 
+ 	if (adapter->flags & FLAG_HAS_MSIX) {
+@@ -1367,7 +1367,7 @@ static int e1000_request_irq(struct e1000_adapter *adapter)
+ static void e1000_free_irq(struct e1000_adapter *adapter)
+ {
+ 	if (adapter->flags & FLAG_HAS_MSIX) {
+-		struct net_device *netdev = adapter->netdev;
++		struct rtnet_device *netdev = adapter->netdev;
+ 		int vector = 0;
+ 
+ 		rtdm_irq_disable(&adapter->rx_irq_handle);
+@@ -1708,7 +1708,7 @@ err:
+ 	return -ENOMEM;
+ }
+ 
+-static int e1000_vlan_rx_add_vid(struct net_device *netdev,
++static int e1000_vlan_rx_add_vid(struct rtnet_device *netdev,
+ 				 __always_unused __be16 proto, u16 vid)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -1734,7 +1734,7 @@ static int e1000_vlan_rx_add_vid(struct net_device *netdev,
+ 	return 0;
+ }
+ 
+-static int e1000_vlan_rx_kill_vid(struct net_device *netdev,
++static int e1000_vlan_rx_kill_vid(struct rtnet_device *netdev,
+ 				  __always_unused __be16 proto, u16 vid)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+@@ -1768,7 +1768,7 @@ static int e1000_vlan_rx_kill_vid(struct net_device *netdev,
+  **/
+ static void e1000e_vlan_filter_disable(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 rctl;
+ 
+@@ -1836,7 +1836,7 @@ static void e1000e_vlan_strip_enable(struct e1000_adapter *adapter)
+ 
+ static void e1000_update_mng_vlan(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	u16 vid = adapter->hw.mng_cookie.vlan_id;
+ 	u16 old_vid = adapter->mng_vlan_id;
+ 
+@@ -2280,7 +2280,7 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
+  * responsible for configuring the hardware for proper unicast, multicast,
+  * promiscuous mode, and all-multi behavior.
+  **/
+-static void e1000e_set_rx_mode(struct net_device *netdev)
++static void e1000e_set_rx_mode(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+@@ -2796,7 +2796,7 @@ static void e1000e_flush_descriptors(struct e1000_adapter *adapter)
+  */
+ void e1000e_down(struct e1000_adapter *adapter, bool reset)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 tctl, rctl;
+ 
+@@ -2958,7 +2958,7 @@ u64 e1000e_read_systim(struct e1000_adapter *adapter,
+  **/
+ static int e1000_sw_init(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 
+ 	adapter->pci_irq = PCI_IRQ_ALL_TYPES;
+ 
+@@ -3013,7 +3013,7 @@ static int e1000_intr_msi_test(rtdm_irq_t *irq_handle)
+  **/
+ static int e1000_test_msi_interrupt(struct e1000_adapter *adapter)
+ {
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	int err;
+ 
+@@ -3116,7 +3116,7 @@ static int e1000_test_msi(struct e1000_adapter *adapter)
+  * handler is registered with the OS, the watchdog timer is started,
+  * and the stack is notified that the interface is ready.
+  **/
+-int e1000e_open(struct net_device *netdev)
++int e1000e_open(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+@@ -3214,7 +3214,7 @@ err_setup_tx:
+  * needs to be disabled.  A global MAC reset is issued to stop the
+  * hardware, and all transmit and receive resources are freed.
+  **/
+-int e1000e_close(struct net_device *netdev)
++int e1000e_close(struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	int count = E1000_CHECK_RESET_COUNT;
+@@ -3443,7 +3443,7 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 	struct e1000_adapter *adapter = container_of(work,
+ 						     struct e1000_adapter,
+ 						     watchdog_task);
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	struct e1000_mac_info *mac = &adapter->hw.mac;
+ 	struct e1000_phy_info *phy = &adapter->hw.phy;
+ 	struct e1000_ring *tx_ring = adapter->tx_ring;
+@@ -3666,7 +3666,7 @@ link_up:
+ #define E1000_TX_FLAGS_VLAN_MASK	0xffff0000
+ #define E1000_TX_FLAGS_VLAN_SHIFT	16
+ 
+-static int e1000_tx_map(struct e1000_adapter *adapter, struct sk_buff *skb,
++static int e1000_tx_map(struct e1000_adapter *adapter, struct rtskb *skb,
+ 			unsigned int first)
+ {
+ 	struct e1000_ring *tx_ring = adapter->tx_ring;
+@@ -3763,7 +3763,7 @@ static void e1000_tx_queue(struct e1000_ring *tx_ring, int tx_flags, int count)
+ 
+ #define MINIMUM_DHCP_PACKET_SIZE 282
+ static int e1000_transfer_dhcp_info(struct e1000_adapter *adapter,
+-				    struct sk_buff *skb)
++				    struct rtskb *skb)
+ {
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u16 length, offset;
+@@ -3793,8 +3793,8 @@ static int e1000_transfer_dhcp_info(struct e1000_adapter *adapter,
+ 	return 0;
+ }
+ 
+-static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
+-				    struct net_device *netdev)
++static netdev_tx_t e1000_xmit_frame(struct rtskb *skb,
++				    struct rtnet_device *netdev)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_ring *tx_ring = adapter->tx_ring;
+@@ -3963,7 +3963,7 @@ release:
+ 
+ static int e1000e_pm_freeze(struct device *dev)
+ {
+-	struct net_device *netdev = dev_get_drvdata(dev);
++	struct rtnet_device *netdev = dev_get_drvdata(dev);
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	bool present;
+ 
+@@ -3996,7 +3996,7 @@ static int e1000e_pm_freeze(struct device *dev)
+ 
+ static int __e1000_shutdown(struct pci_dev *pdev, bool runtime)
+ {
+-	struct net_device *netdev = pci_get_drvdata(pdev);
++	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u32 ctrl, ctrl_ext, rctl, status, wufc;
+@@ -4231,7 +4231,7 @@ static void e1000e_disable_aspm_locked(struct pci_dev *pdev, u16 state)
+ 
+ static int e1000e_pm_thaw(struct device *dev)
+ {
+-	struct net_device *netdev = dev_get_drvdata(dev);
++	struct rtnet_device *netdev = dev_get_drvdata(dev);
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	int rc = 0;
+ 
+@@ -4294,7 +4294,7 @@ static pci_ers_result_t e1000_io_error_detected(struct pci_dev *pdev,
+  */
+ static pci_ers_result_t e1000_io_slot_reset(struct pci_dev *pdev)
+ {
+-	struct net_device *netdev = pci_get_drvdata(pdev);
++	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 	struct e1000_hw *hw = &adapter->hw;
+ 	u16 aspm_disable_flag = 0;
+@@ -4339,7 +4339,7 @@ static pci_ers_result_t e1000_io_slot_reset(struct pci_dev *pdev)
+  */
+ static void e1000_io_resume(struct pci_dev *pdev)
+ {
+-	struct net_device *netdev = pci_get_drvdata(pdev);
++	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+ 	e1000_init_manageability_pt(adapter);
+@@ -4357,7 +4357,7 @@ static void e1000_io_resume(struct pci_dev *pdev)
+ static void e1000_print_device_info(struct e1000_adapter *adapter)
+ {
+ 	struct e1000_hw *hw = &adapter->hw;
+-	struct net_device *netdev = adapter->netdev;
++	struct rtnet_device *netdev = adapter->netdev;
+ 	u32 ret_val;
+ 	u8 pba_str[E1000_PBANUM_LENGTH];
+ 
+@@ -4433,7 +4433,7 @@ static void e1000_unmap_rtskb(struct rtnet_device *netdev, struct rtskb *skb)
+  **/
+ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ {
+-	struct net_device *netdev;
++	struct rtnet_device *netdev;
+ 	struct e1000_adapter *adapter;
+ 	struct e1000_hw *hw;
+ 	const struct e1000_info *ei = e1000_info_tbl[ent->driver_data];
+@@ -4777,7 +4777,7 @@ err_dma:
+  **/
+ static void e1000_remove(struct pci_dev *pdev)
+ {
+-	struct net_device *netdev = pci_get_drvdata(pdev);
++	struct rtnet_device *netdev = pci_get_drvdata(pdev);
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
+ 
+ 	/* The timers may be rescheduled, so explicitly disable them
+-- 
+2.39.2
+

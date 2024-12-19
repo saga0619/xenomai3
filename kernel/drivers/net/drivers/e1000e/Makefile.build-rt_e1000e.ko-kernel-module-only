@@ -1,0 +1,55 @@
+
+# 20171231
+
+# Building Only Kernel Modules : rt_e1000e
+
+# Following https://docs.fedoraproject.org/en-US/Fedora_Core/6/html/Release_Notes/ar01s07s07.html
+
+# Based upon ~/RT/xenomai/build/xenomai-3/kernel/drivers/net/drivers/e1000e/Makefile
+
+#ccflags-y += -Idrivers/xenomai/net/stack/include
+
+#obj-$(CONFIG_XENO_DRIVERS_NET_DRV_E1000E) += rt_e1000e.o
+
+#rt_e1000e-y := \
+#	82571.o \
+#	80003es2lan.o \
+#	ich8lan.o \
+#	lib.o \
+#	netdev.o \
+#	param.o \
+#	phy.o
+
+RM := rm -rf
+
+ccflags-y += -Idrivers/xenomai/net/stack/include
+
+obj-m := rt_e1000e.o
+
+rt_e1000e-y := \
+        82571.o \
+        ich8lan.o \
+        80003es2lan.o \
+	mac.o \
+	manage.o \
+	nvm.o \
+	phy.o \
+	param.o \
+	netdev.o
+# Deleted 	ptp.o \
+		ethtool.o \ from the above list
+	
+KDIR  := /lib/modules/$(shell uname -r)/build
+PWD   := $(shell pwd)
+
+default:
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean: 
+	-$(RM) *.o *.symvers *.order *.mod.c *.ko
+
+MDIR := /lib/modules/$(shell uname -r)/kernel/drivers/xenomai/net/drivers/e1000e
+CP   := sudo cp
+
+install:
+	$(CP) rt_e1000e.ko $(MDIR) 

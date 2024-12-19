@@ -1,0 +1,81 @@
+From f66679e584aea9a6a158748583117501cd010cc8 Mon Sep 17 00:00:00 2001
+From: Gino Strobbe <G.Strobbe@telenet.be>
+Date: Sat, 1 Jun 2024 08:23:07 +0200
+Subject: [PATCH] [v1 10/12] e1000e: Macro call transformations
+
+Signed-off-by: Gino Strobbe <G.Strobbe@telenet.be>
+---
+ kernel/drivers/net/drivers/e1000e/e1000.h  | 10 +++++-----
+ kernel/drivers/net/drivers/e1000e/netdev.c | 10 ++++------
+ 2 files changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/kernel/drivers/net/drivers/e1000e/e1000.h b/kernel/drivers/net/drivers/e1000e/e1000.h
+index 9b63562ec..c60f774c8 100644
+--- a/kernel/drivers/net/drivers/e1000e/e1000.h
++++ b/kernel/drivers/net/drivers/e1000e/e1000.h
+@@ -28,15 +28,15 @@
+ struct e1000_info;
+ 
+ #define e_dbg(format, arg...) \
+-	netdev_dbg(hw->adapter->netdev, format, ## arg)
++	pr_debug(format, ## arg)
+ #define e_err(format, arg...) \
+-	netdev_err(adapter->netdev, format, ## arg)
++	pr_err(format, ## arg)
+ #define e_info(format, arg...) \
+-	netdev_info(adapter->netdev, format, ## arg)
++	pr_info(format, ## arg)
+ #define e_warn(format, arg...) \
+-	netdev_warn(adapter->netdev, format, ## arg)
++	pr_warn(format, ## arg)
+ #define e_notice(format, arg...) \
+-	netdev_notice(adapter->netdev, format, ## arg)
++	pr_notice(format, ## arg)
+ 
+ /* Interrupt modes, as used by the IntMode parameter */
+ #define E1000E_INT_MODE_LEGACY		0
+diff --git a/kernel/drivers/net/drivers/e1000e/netdev.c b/kernel/drivers/net/drivers/e1000e/netdev.c
+index 025ac637a..ea6ac75fd 100644
+--- a/kernel/drivers/net/drivers/e1000e/netdev.c
++++ b/kernel/drivers/net/drivers/e1000e/netdev.c
+@@ -3229,7 +3229,7 @@ int e1000e_close(struct rtnet_device *netdev)
+ 		e1000_free_irq(adapter);
+ 
+ 		/* Link status message must follow this format */
+-		netdev_info(netdev, "NIC Link is Down\n");
++		pr_info("NIC Link is Down\n");
+ 	}
+ 
+ 	e1000e_free_tx_resources(adapter->tx_ring);
+@@ -3341,8 +3341,7 @@ static void e1000_print_link_info(struct e1000_adapter *adapter)
+ 	u32 ctrl = er32(CTRL);
+ 
+ 	/* Link status message must follow this format for user tools */
+-	netdev_info(adapter->netdev,
+-		    "NIC Link is Up %d Mbps %s Duplex, Flow Control: %s\n",
++	pr_info("NIC Link is Up %d Mbps %s Duplex, Flow Control: %s\n",
+ 		    adapter->link_speed,
+ 		    adapter->link_duplex == FULL_DUPLEX ? "Full" : "Half",
+ 		    (ctrl & E1000_CTRL_TFCE) && (ctrl & E1000_CTRL_RFCE) ? "Rx/Tx" :
+@@ -3496,8 +3495,7 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 			/* check if SmartSpeed worked */
+ 			e1000e_check_downshift(hw);
+ 			if (phy->speed_downgraded)
+-				netdev_warn(netdev,
+-					    "Link Speed was downgraded by SmartSpeed\n");
++				pr_warn("Link Speed was downgraded by SmartSpeed\n");
+ 
+ 			/* On supported PHYs, check for duplex mismatch only
+ 			 * if link has autonegotiated at 10/100 half
+@@ -3566,7 +3564,7 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 			adapter->link_speed = 0;
+ 			adapter->link_duplex = 0;
+ 			/* Link status message must follow this format */
+-			netdev_info(netdev, "NIC Link is Down\n");
++			pr_info("NIC Link is Down\n");
+ 			rtnetif_carrier_off(netdev);
+ 			rtnetif_stop_queue(netdev);
+ 			if (!test_bit(__E1000_DOWN, &adapter->state))
+-- 
+2.39.2
+

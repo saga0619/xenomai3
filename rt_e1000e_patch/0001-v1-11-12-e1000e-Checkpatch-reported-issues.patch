@@ -1,0 +1,141 @@
+From e264fcb6bffc8bc2e1add0cacfe7c671826e28ea Mon Sep 17 00:00:00 2001
+From: Gino Strobbe <G.Strobbe@telenet.be>
+Date: Sat, 1 Jun 2024 08:23:09 +0200
+Subject: [PATCH] [v1 11/12] e1000e: Checkpatch reported issues
+
+Signed-off-by: Gino Strobbe <G.Strobbe@telenet.be>
+---
+ kernel/drivers/net/drivers/e1000e/hw.h | 105 +++++++++++++------------
+ 1 file changed, 53 insertions(+), 52 deletions(-)
+
+diff --git a/kernel/drivers/net/drivers/e1000e/hw.h b/kernel/drivers/net/drivers/e1000e/hw.h
+index 4b6e75361..3f94dbbd9 100644
+--- a/kernel/drivers/net/drivers/e1000e/hw.h
++++ b/kernel/drivers/net/drivers/e1000e/hw.h
+@@ -495,29 +495,30 @@ struct e1000_host_mng_command_info {
+ 
+ /* Function pointers for the MAC. */
+ struct e1000_mac_operations {
+-	s32  (*id_led_init)(struct e1000_hw *);
+-	s32  (*blink_led)(struct e1000_hw *);
+-	bool (*check_mng_mode)(struct e1000_hw *);
+-	s32  (*check_for_link)(struct e1000_hw *);
+-	s32  (*cleanup_led)(struct e1000_hw *);
+-	void (*clear_hw_cntrs)(struct e1000_hw *);
+-	void (*clear_vfta)(struct e1000_hw *);
+-	s32  (*get_bus_info)(struct e1000_hw *);
+-	void (*set_lan_id)(struct e1000_hw *);
+-	s32  (*get_link_up_info)(struct e1000_hw *, u16 *, u16 *);
+-	s32  (*led_on)(struct e1000_hw *);
+-	s32  (*led_off)(struct e1000_hw *);
+-	void (*update_mc_addr_list)(struct e1000_hw *, u8 *, u32);
+-	s32  (*reset_hw)(struct e1000_hw *);
+-	s32  (*init_hw)(struct e1000_hw *);
+-	s32  (*setup_link)(struct e1000_hw *);
+-	s32  (*setup_physical_interface)(struct e1000_hw *);
+-	s32  (*setup_led)(struct e1000_hw *);
+-	void (*write_vfta)(struct e1000_hw *, u32, u32);
+-	void (*config_collision_dist)(struct e1000_hw *);
+-	int  (*rar_set)(struct e1000_hw *, u8 *, u32);
+-	s32  (*read_mac_addr)(struct e1000_hw *);
+-	u32  (*rar_get_count)(struct e1000_hw *);
++	s32  (*id_led_init)(struct e1000_hw *hw);
++	s32  (*blink_led)(struct e1000_hw *hw);
++	bool (*check_mng_mode)(struct e1000_hw *hw);
++	s32  (*check_for_link)(struct e1000_hw *hw);
++	s32  (*cleanup_led)(struct e1000_hw *hw);
++	void (*clear_hw_cntrs)(struct e1000_hw *hw);
++	void (*clear_vfta)(struct e1000_hw *hw);
++	s32  (*get_bus_info)(struct e1000_hw *hw);
++	void (*set_lan_id)(struct e1000_hw *hw);
++	s32  (*get_link_up_info)(struct e1000_hw *hw, u16 *speed, u16 *duplex);
++	s32  (*led_on)(struct e1000_hw *hw);
++	s32  (*led_off)(struct e1000_hw *hw);
++	void (*update_mc_addr_list)(struct e1000_hw *hw, u8 *mc_addr_list,
++				    u32 mc_addr_count);
++	s32  (*reset_hw)(struct e1000_hw *hw);
++	s32  (*init_hw)(struct e1000_hw *hw);
++	s32  (*setup_link)(struct e1000_hw *hw);
++	s32  (*setup_physical_interface)(struct e1000_hw *hw);
++	s32  (*setup_led)(struct e1000_hw *hw);
++	void (*write_vfta)(struct e1000_hw *hw, u32 offset, u32 value);
++	void (*config_collision_dist)(struct e1000_hw *hw);
++	int  (*rar_set)(struct e1000_hw *hw, u8 *addr, u32 index);
++	s32  (*read_mac_addr)(struct e1000_hw *hw);
++	u32  (*rar_get_count)(struct e1000_hw *hw);
+ };
+ 
+ /* When to use various PHY register access functions:
+@@ -535,40 +536,40 @@ struct e1000_mac_operations {
+  *
+  */
+ struct e1000_phy_operations {
+-	s32  (*acquire)(struct e1000_hw *);
+-	s32  (*cfg_on_link_up)(struct e1000_hw *);
+-	s32  (*check_polarity)(struct e1000_hw *);
+-	s32  (*check_reset_block)(struct e1000_hw *);
+-	s32  (*commit)(struct e1000_hw *);
+-	s32  (*force_speed_duplex)(struct e1000_hw *);
++	s32  (*acquire)(struct e1000_hw *hw);
++	s32  (*cfg_on_link_up)(struct e1000_hw *hw);
++	s32  (*check_polarity)(struct e1000_hw *hw);
++	s32  (*check_reset_block)(struct e1000_hw *hw);
++	s32  (*commit)(struct e1000_hw *hw);
++	s32  (*force_speed_duplex)(struct e1000_hw *hw);
+ 	s32  (*get_cfg_done)(struct e1000_hw *hw);
+-	s32  (*get_cable_length)(struct e1000_hw *);
+-	s32  (*get_info)(struct e1000_hw *);
+-	s32  (*set_page)(struct e1000_hw *, u16);
+-	s32  (*read_reg)(struct e1000_hw *, u32, u16 *);
+-	s32  (*read_reg_locked)(struct e1000_hw *, u32, u16 *);
+-	s32  (*read_reg_page)(struct e1000_hw *, u32, u16 *);
+-	void (*release)(struct e1000_hw *);
+-	s32  (*reset)(struct e1000_hw *);
+-	s32  (*set_d0_lplu_state)(struct e1000_hw *, bool);
+-	s32  (*set_d3_lplu_state)(struct e1000_hw *, bool);
+-	s32  (*write_reg)(struct e1000_hw *, u32, u16);
+-	s32  (*write_reg_locked)(struct e1000_hw *, u32, u16);
+-	s32  (*write_reg_page)(struct e1000_hw *, u32, u16);
+-	void (*power_up)(struct e1000_hw *);
+-	void (*power_down)(struct e1000_hw *);
++	s32  (*get_cable_length)(struct e1000_hw *hw);
++	s32  (*get_info)(struct e1000_hw *hw);
++	s32  (*set_page)(struct e1000_hw *hw, u16 page);
++	s32  (*read_reg)(struct e1000_hw *hw, u32 offset, u16 *data);
++	s32  (*read_reg_locked)(struct e1000_hw *hw, u32 offset, u16 *data);
++	s32  (*read_reg_page)(struct e1000_hw *hw, u32 offset, u16 *data);
++	void (*release)(struct e1000_hw *hw);
++	s32  (*reset)(struct e1000_hw *hw);
++	s32  (*set_d0_lplu_state)(struct e1000_hw *hw, bool active);
++	s32  (*set_d3_lplu_state)(struct e1000_hw *hw, bool active);
++	s32  (*write_reg)(struct e1000_hw *hw, u32 offset, u16 data);
++	s32  (*write_reg_locked)(struct e1000_hw *hw, u32 offset, u16 data);
++	s32  (*write_reg_page)(struct e1000_hw *hw, u32 offset, u16 data);
++	void (*power_up)(struct e1000_hw *hw);
++	void (*power_down)(struct e1000_hw *hw);
+ };
+ 
+ /* Function pointers for the NVM. */
+ struct e1000_nvm_operations {
+-	s32  (*acquire)(struct e1000_hw *);
+-	s32  (*read)(struct e1000_hw *, u16, u16, u16 *);
+-	void (*release)(struct e1000_hw *);
+-	void (*reload)(struct e1000_hw *);
+-	s32  (*update)(struct e1000_hw *);
+-	s32  (*valid_led_default)(struct e1000_hw *, u16 *);
+-	s32  (*validate)(struct e1000_hw *);
+-	s32  (*write)(struct e1000_hw *, u16, u16, u16 *);
++	s32  (*acquire)(struct e1000_hw *hw);
++	s32  (*read)(struct e1000_hw *hw, u16 offset, u16 words, u16 *data);
++	void (*release)(struct e1000_hw *hw);
++	void (*reload)(struct e1000_hw *hw);
++	s32  (*update)(struct e1000_hw *hw);
++	s32  (*valid_led_default)(struct e1000_hw *hw, u16 *data);
++	s32  (*validate)(struct e1000_hw *hw);
++	s32  (*write)(struct e1000_hw *hw, u16 offset, u16 words, u16 *data);
+ };
+ 
+ struct e1000_mac_info {
+-- 
+2.39.2
+

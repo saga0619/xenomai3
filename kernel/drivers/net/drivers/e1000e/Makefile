@@ -6,7 +6,11 @@ rt_e1000e-y := \
 	82571.o \
 	80003es2lan.o \
 	ich8lan.o \
-	lib.o \
+ 	mac.o \
+	manage.o \
+	nvm.o \
 	netdev.o \
 	param.o \
 	phy.o
+# Deleted 	ptp.o \
+		ethtool.o from the above list

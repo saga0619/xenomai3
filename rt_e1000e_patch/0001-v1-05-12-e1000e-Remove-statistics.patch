@@ -1,0 +1,293 @@
+From 1596f00ed023d9121283ae33d91dc7a8ee923c9d Mon Sep 17 00:00:00 2001
+From: Gino Strobbe <G.Strobbe@telenet.be>
+Date: Sat, 1 Jun 2024 08:22:11 +0200
+Subject: [PATCH] [v1 05/12] e1000e: Remove statistics
+
+Signed-off-by: Gino Strobbe <G.Strobbe@telenet.be>
+---
+ kernel/drivers/net/drivers/e1000e/netdev.c | 241 ---------------------
+ 1 file changed, 241 deletions(-)
+
+diff --git a/kernel/drivers/net/drivers/e1000e/netdev.c b/kernel/drivers/net/drivers/e1000e/netdev.c
+index 49459acfd..acb9c80af 100644
+--- a/kernel/drivers/net/drivers/e1000e/netdev.c
++++ b/kernel/drivers/net/drivers/e1000e/netdev.c
+@@ -2876,8 +2876,6 @@ static void e1000e_flush_descriptors(struct e1000_adapter *adapter)
+ 	e1e_flush();
+ }
+ 
+-static void e1000e_update_stats(struct e1000_adapter *adapter);
+-
+ /**
+  * e1000e_down - quiesce the device and optionally reset the hardware
+  * @adapter: board private structure
+@@ -2921,7 +2919,6 @@ void e1000e_down(struct e1000_adapter *adapter, bool reset)
+ 	del_timer_sync(&adapter->phy_info_timer);
+ 
+ 	spin_lock(&adapter->stats64_lock);
+-	e1000e_update_stats(adapter);
+ 	spin_unlock(&adapter->stats64_lock);
+ 
+ 	e1000e_flush_descriptors(adapter);
+@@ -3388,197 +3385,6 @@ static void e1000_update_phy_info(struct timer_list *t)
+ 	schedule_work(&adapter->update_phy_task);
+ }
+ 
+-/**
+- * e1000e_update_phy_stats - Update the PHY statistics counters
+- * @adapter: board private structure
+- *
+- * Read/clear the upper 16-bit PHY registers and read/accumulate lower
+- **/
+-static void e1000e_update_phy_stats(struct e1000_adapter *adapter)
+-{
+-	struct e1000_hw *hw = &adapter->hw;
+-	s32 ret_val;
+-	u16 phy_data;
+-
+-	ret_val = hw->phy.ops.acquire(hw);
+-	if (ret_val)
+-		return;
+-
+-	/* A page set is expensive so check if already on desired page.
+-	 * If not, set to the page with the PHY status registers.
+-	 */
+-	hw->phy.addr = 1;
+-	ret_val = e1000e_read_phy_reg_mdic(hw, IGP01E1000_PHY_PAGE_SELECT,
+-					   &phy_data);
+-	if (ret_val)
+-		goto release;
+-	if (phy_data != (HV_STATS_PAGE << IGP_PAGE_SHIFT)) {
+-		ret_val = hw->phy.ops.set_page(hw,
+-					       HV_STATS_PAGE << IGP_PAGE_SHIFT);
+-		if (ret_val)
+-			goto release;
+-	}
+-
+-	/* Single Collision Count */
+-	hw->phy.ops.read_reg_page(hw, HV_SCC_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_SCC_LOWER, &phy_data);
+-	if (!ret_val)
+-		adapter->stats.scc += phy_data;
+-
+-	/* Excessive Collision Count */
+-	hw->phy.ops.read_reg_page(hw, HV_ECOL_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_ECOL_LOWER, &phy_data);
+-	if (!ret_val)
+-		adapter->stats.ecol += phy_data;
+-
+-	/* Multiple Collision Count */
+-	hw->phy.ops.read_reg_page(hw, HV_MCC_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_MCC_LOWER, &phy_data);
+-	if (!ret_val)
+-		adapter->stats.mcc += phy_data;
+-
+-	/* Late Collision Count */
+-	hw->phy.ops.read_reg_page(hw, HV_LATECOL_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_LATECOL_LOWER, &phy_data);
+-	if (!ret_val)
+-		adapter->stats.latecol += phy_data;
+-
+-	/* Collision Count - also used for adaptive IFS */
+-	hw->phy.ops.read_reg_page(hw, HV_COLC_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_COLC_LOWER, &phy_data);
+-	if (!ret_val)
+-		hw->mac.collision_delta = phy_data;
+-
+-	/* Defer Count */
+-	hw->phy.ops.read_reg_page(hw, HV_DC_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_DC_LOWER, &phy_data);
+-	if (!ret_val)
+-		adapter->stats.dc += phy_data;
+-
+-	/* Transmit with no CRS */
+-	hw->phy.ops.read_reg_page(hw, HV_TNCRS_UPPER, &phy_data);
+-	ret_val = hw->phy.ops.read_reg_page(hw, HV_TNCRS_LOWER, &phy_data);
+-	if (!ret_val)
+-		adapter->stats.tncrs += phy_data;
+-
+-release:
+-	hw->phy.ops.release(hw);
+-}
+-
+-/**
+- * e1000e_update_stats - Update the board statistics counters
+- * @adapter: board private structure
+- **/
+-static void e1000e_update_stats(struct e1000_adapter *adapter)
+-{
+-	struct net_device *netdev = adapter->netdev;
+-	struct e1000_hw *hw = &adapter->hw;
+-	struct pci_dev *pdev = adapter->pdev;
+-
+-	/* Prevent stats update while adapter is being reset, or if the pci
+-	 * connection is down.
+-	 */
+-	if (adapter->link_speed == 0)
+-		return;
+-	if (pci_channel_offline(pdev))
+-		return;
+-
+-	adapter->stats.crcerrs += er32(CRCERRS);
+-	adapter->stats.gprc += er32(GPRC);
+-	adapter->stats.gorc += er32(GORCL);
+-	er32(GORCH);		/* Clear gorc */
+-	adapter->stats.bprc += er32(BPRC);
+-	adapter->stats.mprc += er32(MPRC);
+-	adapter->stats.roc += er32(ROC);
+-
+-	adapter->stats.mpc += er32(MPC);
+-
+-	/* Half-duplex statistics */
+-	if (adapter->link_duplex == HALF_DUPLEX) {
+-		if (adapter->flags2 & FLAG2_HAS_PHY_STATS) {
+-			e1000e_update_phy_stats(adapter);
+-		} else {
+-			adapter->stats.scc += er32(SCC);
+-			adapter->stats.ecol += er32(ECOL);
+-			adapter->stats.mcc += er32(MCC);
+-			adapter->stats.latecol += er32(LATECOL);
+-			adapter->stats.dc += er32(DC);
+-
+-			hw->mac.collision_delta = er32(COLC);
+-
+-			if ((hw->mac.type != e1000_82574) &&
+-			    (hw->mac.type != e1000_82583))
+-				adapter->stats.tncrs += er32(TNCRS);
+-		}
+-		adapter->stats.colc += hw->mac.collision_delta;
+-	}
+-
+-	adapter->stats.xonrxc += er32(XONRXC);
+-	adapter->stats.xontxc += er32(XONTXC);
+-	adapter->stats.xoffrxc += er32(XOFFRXC);
+-	adapter->stats.xofftxc += er32(XOFFTXC);
+-	adapter->stats.gptc += er32(GPTC);
+-	adapter->stats.gotc += er32(GOTCL);
+-	er32(GOTCH);		/* Clear gotc */
+-	adapter->stats.rnbc += er32(RNBC);
+-	adapter->stats.ruc += er32(RUC);
+-
+-	adapter->stats.mptc += er32(MPTC);
+-	adapter->stats.bptc += er32(BPTC);
+-
+-	/* used for adaptive IFS */
+-
+-	hw->mac.tx_packet_delta = er32(TPT);
+-	adapter->stats.tpt += hw->mac.tx_packet_delta;
+-
+-	adapter->stats.algnerrc += er32(ALGNERRC);
+-	adapter->stats.rxerrc += er32(RXERRC);
+-	adapter->stats.cexterr += er32(CEXTERR);
+-	adapter->stats.tsctc += er32(TSCTC);
+-	adapter->stats.tsctfc += er32(TSCTFC);
+-
+-	/* Fill out the OS statistics structure */
+-	netdev->stats.multicast = adapter->stats.mprc;
+-	netdev->stats.collisions = adapter->stats.colc;
+-
+-	/* Rx Errors */
+-
+-	/* RLEC on some newer hardware can be incorrect so build
+-	 * our own version based on RUC and ROC
+-	 */
+-	netdev->stats.rx_errors = adapter->stats.rxerrc +
+-	    adapter->stats.crcerrs + adapter->stats.algnerrc +
+-	    adapter->stats.ruc + adapter->stats.roc + adapter->stats.cexterr;
+-	netdev->stats.rx_length_errors = adapter->stats.ruc +
+-	    adapter->stats.roc;
+-	netdev->stats.rx_crc_errors = adapter->stats.crcerrs;
+-	netdev->stats.rx_frame_errors = adapter->stats.algnerrc;
+-	netdev->stats.rx_missed_errors = adapter->stats.mpc;
+-
+-	/* Tx Errors */
+-	netdev->stats.tx_errors = adapter->stats.ecol + adapter->stats.latecol;
+-	netdev->stats.tx_aborted_errors = adapter->stats.ecol;
+-	netdev->stats.tx_window_errors = adapter->stats.latecol;
+-	netdev->stats.tx_carrier_errors = adapter->stats.tncrs;
+-
+-	/* Tx Dropped needs to be maintained elsewhere */
+-
+-	/* Management Stats */
+-	adapter->stats.mgptc += er32(MGTPTC);
+-	adapter->stats.mgprc += er32(MGTPRC);
+-	adapter->stats.mgpdc += er32(MGTPDC);
+-
+-	/* Correctable ECC Errors */
+-	if (hw->mac.type >= e1000_pch_lpt) {
+-		u32 pbeccsts = er32(PBECCSTS);
+-
+-		adapter->corr_errors +=
+-		    pbeccsts & E1000_PBECCSTS_CORR_ERR_CNT_MASK;
+-		adapter->uncorr_errors +=
+-		    FIELD_GET(E1000_PBECCSTS_UNCORR_ERR_CNT_MASK, pbeccsts);
+-	}
+-}
+-
+ /**
+  * e1000_phy_read_status - Update the PHY register status snapshot
+  * @adapter: board private structure
+@@ -3869,7 +3675,6 @@ static void e1000_watchdog_task(struct work_struct *work)
+ 
+ link_up:
+ 	spin_lock(&adapter->stats64_lock);
+-	e1000e_update_stats(adapter);
+ 
+ 	mac->tx_packet_delta = adapter->stats.tpt - adapter->tpt_old;
+ 	adapter->tpt_old = adapter->stats.tpt;
+@@ -4307,52 +4112,6 @@ static void e1000_reset_task(struct work_struct *work)
+ 	rtnl_unlock();
+ }
+ 
+-/**
+- * e1000e_get_stats64 - Get System Network Statistics
+- * @netdev: network interface device structure
+- * @stats: rtnl_link_stats64 pointer
+- *
+- * Returns the address of the device statistics structure.
+- **/
+-void e1000e_get_stats64(struct net_device *netdev,
+-			struct rtnl_link_stats64 *stats)
+-{
+-	struct e1000_adapter *adapter = netdev_priv(netdev);
+-
+-	spin_lock(&adapter->stats64_lock);
+-	e1000e_update_stats(adapter);
+-	/* Fill out the OS statistics structure */
+-	stats->rx_bytes = adapter->stats.gorc;
+-	stats->rx_packets = adapter->stats.gprc;
+-	stats->tx_bytes = adapter->stats.gotc;
+-	stats->tx_packets = adapter->stats.gptc;
+-	stats->multicast = adapter->stats.mprc;
+-	stats->collisions = adapter->stats.colc;
+-
+-	/* Rx Errors */
+-
+-	/* RLEC on some newer hardware can be incorrect so build
+-	 * our own version based on RUC and ROC
+-	 */
+-	stats->rx_errors = adapter->stats.rxerrc +
+-	    adapter->stats.crcerrs + adapter->stats.algnerrc +
+-	    adapter->stats.ruc + adapter->stats.roc + adapter->stats.cexterr;
+-	stats->rx_length_errors = adapter->stats.ruc + adapter->stats.roc;
+-	stats->rx_crc_errors = adapter->stats.crcerrs;
+-	stats->rx_frame_errors = adapter->stats.algnerrc;
+-	stats->rx_missed_errors = adapter->stats.mpc;
+-
+-	/* Tx Errors */
+-	stats->tx_errors = adapter->stats.ecol + adapter->stats.latecol;
+-	stats->tx_aborted_errors = adapter->stats.ecol;
+-	stats->tx_window_errors = adapter->stats.latecol;
+-	stats->tx_carrier_errors = adapter->stats.tncrs;
+-
+-	/* Tx Dropped needs to be maintained elsewhere */
+-
+-	spin_unlock(&adapter->stats64_lock);
+-}
+-
+ static int e1000_init_phy_wakeup(struct e1000_adapter *adapter, u32 wufc)
+ {
+ 	struct e1000_hw *hw = &adapter->hw;
+-- 
+2.39.2
+

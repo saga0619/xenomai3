@@ -1,0 +1,10 @@
+
+  Based upon the interrupt pipeline patched vanilla kernel GIT repositry
+    https://source.denx.de/Xenomai/linux-dovetail.git
+      branch remotes/origin/v6.9-dovetail-rebase
+        commit 0c73218daf0626877b98ce0d156e968d48d8b3c8
+
+  Based upon the Xenomai GIT repositry
+    https://source.denx.de/Xenomai/xenomai.git/
+      branch remotes/origin/next
+        commit 00454d5d127c29b93f8c0babf1336bfc35be3b98
