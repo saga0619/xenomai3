@@ -1,7 +1,15 @@
 Xenomai 3.3-rc1 mirror.
-I219 lan driver patch applied, which is from [here](https://lore.kernel.org/xenomai/CAFCNAPBUT9W_X=Y_Hm4uOzE_3ZHK=C2M4oD4KwHA0TmAAH5xSQ@mail.gmail.com/)
+I219 lan driver(rt_e1000e) patch applied, which is from [here](https://lore.kernel.org/xenomai/CAFCNAPBUT9W_X=Y_Hm4uOzE_3ZHK=C2M4oD4KwHA0TmAAH5xSQ@mail.gmail.com/)
 
+tested with linux dovetail, 
 
+- linux dovetail, v6.6.63-dovetail1-rebase [[git]](https://source.denx.de/Xenomai/linux-dovetail/-/tree/233e5ca2359d96076fae77625716da5aaca2f19c) [[tar.gz]](https://source.denx.de/Xenomai/linux-dovetail/-/archive/233e5ca2359d96076fae77625716da5aaca2f19c/linux-dovetail-233e5ca2359d96076fae77625716da5aaca2f19c.tar.gz)
+
+- linux dovetail, v6.9-dovetail1-rebase [[git]](https://source.denx.de/Xenomai/linux-dovetail/-/tree/018810754de6dea127fffe13b274e40d65476dfe) [[tar.gz]](https://source.denx.de/Xenomai/linux-dovetail/-/archive/018810754de6dea127fffe13b274e40d65476dfe/linux-dovetail-018810754de6dea127fffe13b274e40d65476dfe.tar.gz)
+
+rtnet patched Simple Open EtherCAT Master : [RTNET_SOEM](https://github.com/saga0619/rtnet_soem)
+
+you can find rtnet activation script for SOEM, [rtnet script](https://github.com/saga0619/rtnet_soem/blob/main/rtnet_script/start_rtnet.sh)
 
 Where to start from?
 ====================
