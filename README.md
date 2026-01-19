@@ -11,6 +11,8 @@ rtnet patched Simple Open EtherCAT Master : [RTNET_SOEM](https://github.com/saga
 
 you can find rtnet activation script for SOEM, [rtnet script](https://github.com/saga0619/rtnet_soem/blob/main/rtnet_script/start_rtnet.sh)
 
+installation guide in korean : [NOTION](https://www.notion.so/Xenomai-3-Install-Tutorial-17d492e5393380a29f88f885aeba6645?source=copy_link)
+
 Where to start from?
 ====================
 
